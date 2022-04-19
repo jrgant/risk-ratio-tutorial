@@ -3,6 +3,8 @@
 #date: "4/7/2022"
 #goal: The purpose of this code it to supplement a tutorial-style manuscript on calculating RRs and PRs using a modified Poisson model in R
 
+#This is a test for git
+
 #Set Brown Dropbox as working directory
 setwd('C:/Users/ryorlets/Dropbox (Brown)/Brown SPH - Manuscripts/Calculations in R for RR and PR/Code')
 
