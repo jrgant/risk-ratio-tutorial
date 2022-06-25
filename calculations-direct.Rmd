@@ -1,0 +1,76 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+# FILE INFORMATION -------------------------------------------------------------
+
+# Companion to:
+#
+# A practical guide to calculating risk and prevalence ratios in R
+# Rachel R Yorlets, Jason R Gantenberg, Youjin Lee
+
+
+# SETUP ------------------------------------------------------------------------
+```{r}
+if (! "pacman" %in% installed.packages()) install.packages("pacman")
+
+pacman::p_load(readr, sandwich, finalfit, boot)
+```
+# NHEFS data
+```{r}
+nhefs <- read.csv2("nhefs.csv", sep = ",")
+```
+# CHECK FOR MISSINGNESS
+```{r}
+nhefs %>% 
+  missing_plot('weakheart', 'death')
+```
+# DIRECT ESTIMATION: MODIFIED POISSON REGRESSION MODEL -------------------------
+
+# Step 1. Fit Poisson regression for relationship between receipt of heart
+#         medication in 1971 (weakheart) and subsequent mortality (death)
+```{r}
+poisson_model <- glm(death ~ weakheart, data = nhefs, family = poisson(link = log))
+summary(poisson_model)
+```
+# Step 2. Calculate robust standard errors using the sandwich estimator
+```{r}
+#Calculate the covariance, using 'HC0', which refers to the sandwich estimator
+covariance <- vcovHC(poisson_model, type = 'HC0')
+
+#Calculate the standard error
+se <- sqrt(diag(covariance))
+
+#Bind together model output with robust standard error and respective 95% confidence intervals
+#Note that qnorm(0.975) = 1.96
+model_output <- cbind(Estimate = exp(coef(poisson_model)), 'Robust SE' = se, Lower = exp(coef(poisson_model) - qnorm(0.975) * se), Upper = exp(coef(poisson_model) + qnorm(0.975) * se))
+
+#Export model output to Excel 
+#Coerce model_output into a data frame
+model_output <- as.data.frame(model_output)
+#Save to working directory
+write_csv(model_output, 'Modified Poisson Model.csv')
+```
+# Step 3. Estimate 95% confidence limits for the risk ratio via non-parametric
+#         bootstrapping.
+```{r}
+#First, write a function that will take the data and Poisson regression model, and index over each observation i in the data set
+bootCI = function(data, formula, i){
+  data = nhefs[i,]
+  formula = glm(death ~ weakheart, family = poisson(link = log))
+  return(exp(coef(formula))[2])
+}
+
+#Set seed
+set.seed(2999)
+#Use the boot() function combined with our function
+boot_estimate = boot(bootCI, nhefs, R = 1000)
+plot(boot_estimate)
+boot.ci(boot.out = boot_estimate, type = c('perc', 'bca'))
+```
+# Review session information
+```{r}
+sessionInfo()
+```
+
