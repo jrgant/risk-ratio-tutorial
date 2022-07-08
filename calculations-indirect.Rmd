@@ -1,47 +1,98 @@
-# FILE INFORMATION -------------------------------------------------------------
+---
+title: 'Example of Indirect Estimation of the Risk Ratio: Logistic Regression'
+author:
+- Rachel R. Yorlets
+- Jason R. Gantenberg
+- Youjin Lee
+subtitle: 'Companion to: A Practical Guide to Calculating Risk and Prevalence Ratios
+  in R'
+output: pdf_document
+standalone: yes
+institute:
+- Department of Epidemiology, Brown University School of Public Health, Providence,
+  RI, USA
+- Department of Health Services, Policy & Practice, Brown University School of Public
+  Health, Providence, RI, USA
+- Department of Biostatistics, Brown University School of Public Health, Providence,
+  RI, USA
+---
 
-# Companion to:
-#
-# A Practical Guide to Estimating Risk Ratios in R
-# Rachel R Yorlets, Jason R Gantenberg, Youjin Lee
+# Setup
 
-
-# SETUP ------------------------------------------------------------------------
 ```{r}
-if (! "pacman" %in% installed.packages()) install.packages("pacman")
+if (! "pacman" %in% installed.packages()) {
+  install.packages("pacman")
+} 
 
-pacman::p_load(magrittr, logisticRR, boot)
+pacman::p_load(magrittr,   # pipes
+               logisticRR, # logistic regression risk ratio
+               boot,       # bootstrapping
+               sessioninfo) # formatted session information
 ```
-# NHEFS data
+
+## NHEFS data
+
 ```{r}
 nhefs <- read.csv2("nhefs.csv", sep = ",")
 ```
-# INDIRECT ESTIMATION: METHOD ONE - MANUAL CALCULATION -------------------------
 
-# Step 1. Fit logistic regression for relationship between receipt of heart
-#         medication in 1971 (weakheart) and subsequent mortality (death)
+# Indirect Estimation
+
+As in the examples using Poisson regression, we are once again interested in the relationship between receipt of heart medication in 1971 (`weakheart`) and subsequent mortality (`death`).
+
+This time, however, we will use a logistic regression to estimate the risk ratio by deriving group-specific risks from the fitted model.
+
+Recall that the logistic regression model uses a logit link and a binomial error distribution to model the outcome as a function of covariates:
+
+$$logit(p) = \beta_0 + \beta_p \textbf{X}_p + \epsilon, \epsilon \sim Binomial(p),$$ where $logit(p) = ln[p / (1-p)]$.
+
+Assume a simple logistic regression model with a single covariate so that the model contains only two parameters: $\beta_0$ and $\beta_1$. Exponentiating $\beta_1$ yields the odds ratio, but we can also derive the predicted probability of the outcome in a specific group. Where $A = 1$ if a subject received heart medication and $A = 0$ if a subject did not, we calculate the probability of death, $Pr(Y=1)$, within each group based on the fitted logistic regression model as follows:
+
+$$Pr(Y = 1 | A = 0) = \frac{e^{\beta_0}}{1 + e^{\beta_0}}$$ $$P(Y = 1 | A = 1) = \frac{e^{\beta_0 + \beta_1}}{1 + e^{\beta_0 + \beta_1}}$$
+
+Now we have all we need to calculate the risk ratio as $Pr(Y = 1 | A = 1) / Pr(Y = 1 | A = 0)$.
+
+## Method One - Manual Calculation
+
+### Step 1. Fit a logistic regression for the relationship between heart medication and mortality
 
 ```{r}
-fit1 <- glm(death ~ weakheart, data = nhefs, family = binomial())
+fit1 <- glm(death ~ weakheart,
+            data = nhefs,
+            family = binomial())
 ```
-# Step 2. Predict the expected probability of death for each weakheart group.
-## Pr(death = 1 | weakheart = 1), risk ratio numerator
+
+### Step 2. Predict the expected probability of death for each weakheart group.
+
+Calculate the risk ratio's numerator as $Pr(death = 1 | weakheart = 1)$:
+
 ```{r}
 prd1_wh1 <- predict(fit1,
                     newdata = data.frame(weakheart = 1),
                     type = "response")
+
+prd1_wh1
 ```
-## Pr(death = 1 | weakheart = 0), risk ratio denominator
+
+Calculate the risk ratio's denominator as $Pr(death = 1 | weakheart = 0)$:
+
 ```{r}
 prd1_wh0 <- predict(fit1,
                     newdata = data.frame(weakheart = 0),
                     type = "response")
+
+prd1_wh0
 ```
-## calculate the risk ratio
+
+Calculate the risk ratio
+
 ```{r}
 rr1 <- prd1_wh1 / prd1_wh0
+rr1
 ```
-## print results to console
+
+Here are the results of each step in the procedure thus far:
+
 ```{r}
 cat("Crude Pr(death = 1) = ", mean(nhefs$death), "\n",
     "Predicted Pr(death = 1 | weakheart = 1) = ", prd1_wh1, "\n",
@@ -50,11 +101,13 @@ cat("Crude Pr(death = 1) = ", mean(nhefs$death), "\n",
     "Odds ratio = ", exp(coef(fit1)[2]), "\n",
     sep = "")
 ```
-# Step 3. Estimate 95% confidence limits for the risk ratio via non-parametric
-#         boostrapping.
 
-## -- 3a. Sample 999 bootstrap replicates (with replacement) and record
-##        which observations in the original data are members of each replicate.
+### Step 3. Estimate 95% confidence limits for the risk ratio via non-parametric boostrapping.
+
+#### 3a. Sample observations from the original dataset with replacement
+
+Here, we specify that we want to generate 999 bootstrap replicates of our original data and record which observations in the original data are members of each replicate.
+
 ```{r}
 data_n <- nrow(nhefs)
 
@@ -72,78 +125,127 @@ replist <- lapply(
   )
 )
 ```
-### check to make sure all vectors are of the expected length
-### evaluation should return TRUE
+
+Each item in this list contains a vector of row indices that identifies subjects in the original dataset. Because we sampled from the `nhefs` data with replacement, any given bootstrap replicate may contain 0, 1, or more copies of a given subject.
+
+Before we proceed, we check to make sure all vectors are of the expected length. The following evaluation should return `TRUE`.
+
 ```{r}
 all(sapply(replist, length) == data_n)
 ```
-## -- 3b. Express steps 1 and 2 in a function that we can evaluate repeatedly,
-##        within each boostrap replicate.
+
+#### 3b. Express steps 1 and 2 in a function that we can evaluate repeatedly, *i.e.*, within each boostrap replicate.
+
+Let's begin by writing a function called `estimate_risk_ratio()` that:
+
+1)  fits a logistic regression
+2)  extracts the predicted mortality probabilities for each `weakheart` group, and
+3)  returns the estimated risk ratio.
+
+We will use this function several times throughout the rest of the example.
+
 ```{r}
 estimate_risk_ratio <- function(dat = nhefs, x) {
-  fit <- glm(death ~ weakheart, data = dat[x, ], family = binomial())
-  rrnum <- predict(fit, newdata = data.frame(weakheart = 1), type = "response")
-  rrden <- predict(fit, newdata = data.frame(weakheart = 0), type = "response")
+  # 1. fit logistic model
+  fit <- glm(death ~ weakheart,
+             data = dat[x, ],
+             family = binomial())
+  
+  # 2. get predicted probabilities for each weakheart group
+  rrnum <- predict(fit,
+                   newdata = data.frame(weakheart = 1),
+                   type = "response")
+  
+  rrden <- predict(fit,
+                   newdata = data.frame(weakheart = 0),
+                   type = "response")
+  
+  # 3. calculate risk ratio and return
   rr_est <- rrnum / rrden
   return(rr_est)
 }
 ```
-## -- 3c. Run analysis in step 2 within each bootstrap replicate and extract
-##        a vector of 999 risk ratio estimates (i.e., the bootstrap
-##        distribution).
+
+#### 3c. Run analysis in step 2 within each bootstrap replicate and extract a vector of 999 risk ratio estimates (i.e., the bootstrap distribution).
+
 ```{r}
-rrboot <- sapply(replist, function(.x) estimate_risk_ratio(x = .x)) %>% unname()
+rrboot <- sapply(replist, function(.x) {
+  estimate_risk_ratio(x = .x) 
+  }) %>% unname()
 ```
-### summarize bootstrapped distribution of risk ratios
+
+We can plot a histogram to summarize the bootstrapped distribution of risk ratios.
+
 ```{r}
 summary(rrboot)
 hist(rrboot, breaks = 20)
+abline(v = rr1, col = "red", lty = 2)
 ```
-## -- 3d. Calculate the 95% confidence limits for the risk ratio estimate.
 
-### Percentile method (non-parametric):
-###   take 2.5% and 97.5% quantiles of bootstrapped distributions
-###   WARNING: may be invalid in many situations, particularly with
-###            small sample sizes
+#### 3d. Calculate the 95% confidence limits for the risk ratio estimate.
+
+When using the bootstrap to estimate standard errors and confidence limits, a researcher will need to choose an appropriate bootstrapping method. A discussion of alternative bootstrapping methods is beyond the scope of this tutorial, but we illustrate two common methods below, the percentile method and the bias-corrected and accelerated method (BCa).
+
+***Percentile method (non-parametric):*** take the 2.5% and 97.5% quantiles of the bootstrapped distribution. WARNING: the simplest percentile-based confidence limits may be invalid in many situations, particularly with small sample sizes.
+
 ```{r}
-bootcl_percentile <- quantile(rrboot, c(0.025, 0.975)) %>% round(digits = 3)
-```
-### Bias-corrected and accelerated (BCa) percentile method (non-parametric):
-###   calculate two additional parameters (z0 and a) to adjust interval
-###   estimate so that it has better coverage properties
-###   NOTE: preferred over the percentile method and likely a better choice
-###         for a general-purpose confidence interval estimate
+bootcl_percentile <- 
+  quantile(rrboot, c(0.025, 0.975)) %>% 
+  round(digits = 3)
 
+bootcl_percentile
+```
+
+***BCa percentile method (non-parametric)*****:** calculate two additional parameters ($z_0$ and $a$) to adjust the confidence interval estimate so that it has better coverage properties compared to the percentile method. NOTE: BCa is likely a safer choice for general-purpose confidence interval estimation.
+
+First, we calculate the bias-correction parameter $z_0$:
+
+```{r}
 ### z0 and a estimated as described in:
 ###   Efron B. and Tibshirani R.J. An Introduction to the Bootstrap.
 ###   CRC Press, 1993: pgs. 185-186.
 
 ### calculate z0, bias correction
-```{r}
 z0 <- qnorm(sum(rrboot < rr1) / B)
 ```
-### calculate a, acceleration
+
+Next, we calculate the acceleration parameter $a$, which is a jackknifed estimate of the risk ratio:
+
 ```{r}
+### calculate a, acceleration
+
 theta_jack <- sapply(
   seq_len(nrow(nhefs)),
-  function(.x) estimate_risk_ratio(dat = nhefs, x = seq_len(nrow(nhefs))[-.x])
+  function(.x) {
+    estimate_risk_ratio(
+      dat = nhefs,
+      x = seq_len(nrow(nhefs))[-.x]
+    ) 
+  }
 ) %>% unname()
 
-anum <- sum((mean(theta_jack) - theta_jack)^3) # a numerator
+### calculate the numerator and denominator for a
+anum <- sum((mean(theta_jack) - theta_jack)^3)
 aden <- (6 * sum((mean(theta_jack) - theta_jack)^2))^(3/2)
 a <- anum / aden
 ```
-### bias-corrected quantile for lower limit
+
+Finally, we can calculate our 95% confidence limit.
+
+First, we get the bias-corrected quantile for lower limit:
+
 ```{r}
-a1 <- pnorm(z0 + ((z0 + qnorm(0.025)) / (1 - (a * (z0 + qnorm(0.025))))))
+a1 <- pnorm(z0 + ((z0 + qnorm(0.025)) / 
+                    (1 - (a * (z0 + qnorm(0.025))))))
 ```
-### bias-corrected quantile for upper limit
+
+And next, we get the bias-corrected quantile for upper limit:
+
 ```{r}
 a2 <- pnorm(z0 + ((z0 + qnorm(1 - 0.025)) /
                   (1 - (a * (z0 + qnorm(1 - 0.025))))))
 
 bootcl_bca <- quantile(rrboot, c(a1, a2)) %>% round(digits = 3)
-
 
 rr1_dig3 <- round(rr1, digits = 3)
 
@@ -159,59 +261,60 @@ manual_calcs <- function() {
 
 manual_calcs()
 ```
-# INDIRECT ESTIMATION: METHOD TWO - THE BOOT PACKAGE ---------------------------
 
-## We can also use the 'boot' package, which has two main advantages over the
-## code in Method One:
-##
-##   1) It has built-in support for parallel processing, which we'd have to
-##      code ourselves and omitted for simplicity in the prior section. Using
-##      multiple CPUs to run parallel analyses within bootstrap replicates
-##      can speed up estimation of the bootstrap distribution significantly,
-##      particularly within large datasets (e.g., those with tens of thousands
-##      to millions of rows).
-##
-##   2) The 'boot' package implements several methods for obtaining bootsrapped
-##      confidence limits via simple arguments to its primary function. Some
-##      of these methods may have better coverage properties than the
-##      percentile or plugin estimates we produced in the prior section.
+## Method Two - The `boot` Package
 
-## Step 1. Specify a function that estimates and returns the risk ratio.
+We can also use the 'boot' package, which has two main advantages over the code in Method One:
 
-### Here we can reuse the estimate_risk_ratio() function we created during
-### Method One. We ask boot::boot() to split the process up into 4 "jobs"
-### and run these subsets in parallel.
+1)  It has built-in support for parallel processing, which we'd have to code ourselves and omitted for simplicity in the prior section. Using multiple CPUs to run parallel analyses within bootstrap replicates can speed up estimation of the bootstrap distribution significantly, particularly wih large datasets (e.g., those with tens of thousands to millions of rows).
+
+2)  The 'boot' package implements several methods for obtaining bootsrapped confidence limits via simple arguments to its primary function.
+
+### Step 1. Specify a function that estimates and returns the risk ratio.
+
+Here we can reuse the `estimate_risk_ratio()` function we created in Method One. We ask `boot::boot()` to split the process up into 4 "jobs" and run these subsets in parallel, one on each CPU.
+
 ```{r}
 set.seed(31415)
-rrboot_pkg <- boot::boot(nhefs[, c("seqn", "weakheart", "death")],
-  estimate_risk_ratio,
+rrboot_pkg <- boot::boot(
+  data = nhefs[, c("seqn", "weakheart", "death")],
+  statistic = estimate_risk_ratio,
   R = B,
   parallel = "multicore",
   ncpus = 4
 )
+
+rrboot_pkg
 ```
-## NOTE: The 'boot' package uses a slightly different calculation for
-##       the acceleration parameter than the one we used when
-##       calculating the BCa intervals manually. Refer to the boot()
-##       package documentation of empinf() for default settings
-##       regarding BCa interval estimation.
+
+In the code below, we ask `boot()` for the percentile and BCa confidence intervals, via the `type` argument.
+
+*Note:* The `boot:boot()` function uses a slightly different calculation for the acceleration parameter than the one we used when calculating the BCa intervals manually. Refer to the `boot` package documentation of `empinf()` for default settings regarding BCa interval estimation.
+
 ```{r}
-rrbootcl_pkg <- boot::boot.ci(rrboot_pkg,
+rrbootcl_pkg <- boot::boot.ci(
+  rrboot_pkg,
   conf = 0.95,
   type = c("perc", "bca")
 )
 
 rrbootcl_pkg
-manual_calcs()
+
 ```
-# INDIRECT ESTIMATION: METHOD THREE - The logisticRR PACKAGE -------------------
+
+## Method Three - The logisticRR Package
+
 ```{r}
 rr_lrr <- logisticRR::logisticRR(death ~ weakheart,
                                  data = nhefs,
                                  boot = TRUE,
                                  n.boot = B)
+
+rr_lrr
 ```
-# Review session information
+
+## Session Information
+
 ```{r}
-sessionInfo()
+sessioninfo::session_info()
 ```

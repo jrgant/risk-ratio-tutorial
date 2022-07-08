@@ -1,76 +1,151 @@
 ---
+title: 'Example of Direct Estimation of Risk and Prevalence Ratios: Modified Poisson
+  Regression'
+author:
+- Rachel R. Yorlets
+- Jason R. Gantenberg
+- Youjin Lee
+subtitle: 'Companion to: A Practical Guide to Calculating Risk and Prevalence Ratios
+  in R'
 output:
-  word_document: default
-  html_document: default
+  html_document:
+    df_print: paged
+standalone: yes
+institute:
+- Department of Epidemiology, Brown University School of Public Health, Providence,
+  RI, USA
+- Department of Health Services, Policy & Practice, Brown University School of Public
+  Health, Providence, RI, USA
+- Department of Biostatistics, Brown University School of Public Health, Providence,
+  RI, USA
 ---
-# FILE INFORMATION -------------------------------------------------------------
 
-# Companion to:
-#
-# A practical guide to calculating risk and prevalence ratios in R
-# Rachel R Yorlets, Jason R Gantenberg, Youjin Lee
+# Setup
 
-
-# SETUP ------------------------------------------------------------------------
 ```{r}
-if (! "pacman" %in% installed.packages()) install.packages("pacman")
+if (! "pacman" %in% installed.packages()) {
+  install.packages("pacman")
+}
 
-pacman::p_load(readr, sandwich, finalfit, boot)
+pacman::p_load(magrittr, # pipes
+               sandwich, # sandwich estimator
+               finalfit, # missing_plot()
+               boot,     # bootstrapping
+               sessioninfo) # formatted session information
 ```
-# NHEFS data
+
+## NHEFS data
+
 ```{r}
 nhefs <- read.csv2("nhefs.csv", sep = ",")
 ```
-# CHECK FOR MISSINGNESS
-```{r}
-nhefs %>% 
-  missing_plot('weakheart', 'death')
-```
-# DIRECT ESTIMATION: MODIFIED POISSON REGRESSION MODEL -------------------------
 
-# Step 1. Fit Poisson regression for relationship between receipt of heart
-#         medication in 1971 (weakheart) and subsequent mortality (death)
-```{r}
-poisson_model <- glm(death ~ weakheart, data = nhefs, family = poisson(link = log))
-summary(poisson_model)
+## Check for Missing Data
+
+```{r missing-data, fig.cap = "_Note:_ In this example we are not interested in in the the `pregnancies` variable. We include it only to depict output for a variable that contains missing values and compare it to the output for the `weakheart` and `death` variables, which do not contain missing values."}
+nhefs %>% 
+  missing_plot(dependent = "weakheart",
+               explanatory = c("death", "pregnancies"))
 ```
-# Step 2. Calculate robust standard errors using the sandwich estimator
+
+# Direct Estimation: Modified Poisson Regression Model
+
+## Step 1. Fit a Poisson regression for the relationship between heart medication and mortality
+
+Here we use the `glm()` function to fit a Poisson regression model for the relationship between receipt of heart medication in 1971 (`weakheart`) and subsequent mortality (`death`).
+
+Recall that the general form of the Poisson regression model is
+
+$$ln(\lambda) = \beta_0 + \beta_p \textbf{X}_p + \epsilon, \epsilon \sim Poisson(\lambda),$$ 
+
+where $\lambda$ denotes the rate parameter of a Poisson distribution, $\beta_0$ denotes the model intercept, and $\beta_p$ denotes the coefficient corresponding to the $p$th covariate in the vector $\textbf{X}_p$.
+
+To fit a Poisson model the user must specify a Poisson error distribution and a (natural) log link, which is passed to the `family` argument of `glm()` as shown below.
+
+
+```{r}
+poisson_fit <- glm(death ~ weakheart,
+                   data = nhefs,
+                   family = poisson(link = log))
+
+summary(poisson_fit)
+```
+
+## Step 2. Calculate "robust" standard errors using the sandwich estimator
+
+Because we are using Poisson regression to model a binary outcome, and because binary outcomes follow a _binomial_ error distribution, the Poisson model is misspecified in the sense that it will not produce valid standard errors for coefficient estimates. The sandwich estimator "corrects" these standard errors to account for the misspecification.
+
+We begin by estimating the covariance matrix using the `vcov()` function from the `sandwich` package.
+
 ```{r}
 #Calculate the covariance, using 'HC0', which refers to the sandwich estimator
-covariance <- vcovHC(poisson_model, type = 'HC0')
+covmat <- vcovHC(poisson_fit, type = "HC0")
 
+covmat
+```
+The diagonal of this covariance matrix contains the estimated variances for each coefficient---in this case, the intercept ($\beta_0$) and `weakheart` ($\beta_1$). Therefore, to calculate the standard errors for each coefficient, we extract the diagonal using the `diag()` function and take the square root.
+
+The code below carries out these additional steps and uses the robust standard errors to calculate 95% confidence intervals for the coefficients on the (natural) log scale.
+
+```{r robust-se-table}
 #Calculate the standard error
-se <- sqrt(diag(covariance))
+se <- sqrt(diag(covmat))
 
 #Bind together model output with robust standard error and respective 95% confidence intervals
-#Note that qnorm(0.975) = 1.96
-model_output <- cbind(Estimate = exp(coef(poisson_model)), 'Robust SE' = se, Lower = exp(coef(poisson_model) - qnorm(0.975) * se), Upper = exp(coef(poisson_model) + qnorm(0.975) * se))
+#Note that qnorm(0.975) approximately equals 1.96
+model_output <- cbind(
+  Estimate = coef(poisson_fit),
+  `Robust SE` = se,
+  Lower = coef(poisson_fit) - qnorm(0.975) * se,
+  Upper = coef(poisson_fit) + qnorm(0.975) * se
+)
 
 #Export model output to Excel 
 #Coerce model_output into a data frame
 model_output <- as.data.frame(model_output)
-#Save to working directory
-write_csv(model_output, 'Modified Poisson Model.csv')
+
+knitr::kable(model_output, digits = 4)
 ```
-# Step 3. Estimate 95% confidence limits for the risk ratio via non-parametric
-#         bootstrapping.
-```{r}
+
+Now all we need to do is exponentiate the estimate for `weakheart` to yield a point estimate for the risk ratio and its 95% confidence interval.
+
+```{r robust-se-exp}
+knitr::kable(exp(model_output[2, ]), digits = 3)
+```
+
+## Step 3. Estimate 95% confidence limits for the risk ratio via non-parametric bootstrapping.
+
+```{r, fig.asp=0.5}
 #First, write a function that will take the data and Poisson regression model, and index over each observation i in the data set
-bootCI = function(data, formula, i){
-  data = nhefs[i,]
-  formula = glm(death ~ weakheart, family = poisson(link = log))
-  return(exp(coef(formula))[2])
+bootpois = function(dat, x){
+  fit <- glm(death ~ weakheart,
+             family = poisson(link = log),
+             data = dat[x, ])
+  return(exp(coef(fit))[2])
 }
 
 #Set seed
 set.seed(2999)
 #Use the boot() function combined with our function
-boot_estimate = boot(bootCI, nhefs, R = 1000)
+boot_estimate <- boot(
+  data = nhefs,
+  statistic = bootpois,
+  R = 2999,
+  parallel = "multicore",
+  ncpus = 4
+)
+
 plot(boot_estimate)
-boot.ci(boot.out = boot_estimate, type = c('perc', 'bca'))
-```
-# Review session information
-```{r}
-sessionInfo()
+
+#Calculate bootstrapped confidence intervals
+bci <- boot.ci(boot.out = boot_estimate,
+               type = c('perc', 'bca'))
+
+print(bci)
 ```
 
+# Review session information
+
+```{r}
+sessioninfo::session_info()
+```
