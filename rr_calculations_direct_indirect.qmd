@@ -1,0 +1,638 @@
+---
+title: "Online Supplement"
+subtitle: "Comparing Methods to Calculate Risk and Prevalence Ratios and Differences in R: Developing Intuition with a Hands-on Tutorial and Code"
+
+author: 
+  - name: Rachel R. Yorlets
+    affiliations:
+      - Department of Epidemiology, Brown University School of Public Health, Providence, RI, USA 
+  - name: Youjin Lee
+    affiliations:
+      - Department of Biostatistics, Brown University School of Public Health, Providence, RI, USA 
+  - name: Jason R. Gantenberg
+    affiliations: 
+      - Department of Health Services, Policy & Practice, Brown University School of Public Health, Providence, RI, USA
+
+bibliography: references.bib
+
+format:
+  #html:
+  #  toc: true
+  #  toc-depth: 2
+  #  toc-location: left
+  #  code-fold: show
+  #  html-math-method: katex
+  #  standalone: true
+  pdf:
+    toc: true
+    toc-depth: 1
+    keep-tex: true
+    include-in-header: 
+      text: |
+        \usepackage{multirow}
+        
+number-sections: false
+standalone: true
+---
+
+\newpage
+
+For ease of reference, the following sections in this supplementary file share the numbered headings of the main manuscript to which they correspond. In addition, we have suppressed supporting citations for material already discussed and cited in the main manuscript.
+
+# 2. Applied example using clinical data to calculate a crude risk ratio and risk difference
+
+```{r setup}
+# install the pacman package if not already installed
+if (! "pacman" %in% installed.packages()) {
+  install.packages("pacman")
+}
+
+# load necessary packages
+pacman::p_load(
+  magrittr,     # pipes
+  sandwich,     # sandwich estimator
+  finalfit,     # missing_plot()
+  logbin,       # log-binomial regression
+  broom,        # exponentiate coefficients 
+  boot,         # bootstrapping
+  ggplot2,      # plotting
+  sessioninfo   # formatted session information
+)
+
+# set document output options
+knitr::opts_chunk$set(cache = TRUE)
+
+# read in NHEFS dataset
+nhefs <- read.csv2("nhefs.csv", sep = ",")
+```
+
+As mentioned in the main manuscript, we are interested in estimating the associational ("crude") risk of death in 1992 relative to taking (or not taking) medication for a weak heart in 1971 among NHEFS participants who completed a baseline medical history between 1971--1975 (*n* = 1629). We can first use R to explore if we have any missing data for our exposure (heart medication) or outcome (death).
+
+```{r missing-data}
+#| fig.cap: In this example we are not interested in the `pregnancies` variable. We include it only to depict output for a variable that contains missing values and compare it to the output for the `weakheart` and `death` variables, which do not contain missing values.
+ 
+missing_plot(
+  nhefs,
+  dependent = "death",
+  explanatory = c("weakheart", "pregnancies"),
+  plot_opts = theme(
+    text = element_text(size = 20),
+    axis.title.x = element_text(margin = margin(t = 15, unit ="pt"))
+  )
+)
+```
+
+Noting that we have no missingness in our analytic variables, we can proceed.
+
+# 2.1 Direct estimation of a risk ratio and risk difference by hand
+
+### Step 2.1a. Calculate the risk ratio
+
+We can use R to calculate the number of participants who did or did not die by 1992, and stratify them by whether they took heart medication in 1971.
+
+```{r twobytwo-freqs-echoed}
+# 17 individuals took heart medication in 1971 died in 1992
+length(which(nhefs$weakheart == 1 & nhefs$death == 1))
+
+# 19 individuals took heart medication in 1971 did not die in 1992
+length(which(nhefs$weakheart == 1 & nhefs$death == 0))
+
+# 301 individuals did not take heart medication in 1971 and died in 1992
+length(which(nhefs$weakheart == 0 & nhefs$death == 1))
+
+# 1292 individuals did not take heart medication in 1971 and did not die in 1992
+length(which(nhefs$weakheart == 0 & nhefs$death == 0))
+```
+
+```{r twobytwo-freqs-silent, echo = F}
+# 17 individuals took heart medication in 1971 died in 1992
+len_w1d1 <- length(which(nhefs$weakheart == 1 & nhefs$death == 1))
+
+# 19 individuals took heart medication in 1971 did not die in 1992
+len_w1d0 <- length(which(nhefs$weakheart == 1 & nhefs$death == 0))
+
+# 301 individuals did not take heart medication in 1971 and died in 1992
+len_w0d1 <- length(which(nhefs$weakheart == 0 & nhefs$death == 1))
+
+# 1292 individuals did not take heart medication in 1971 and did not die in 1992
+len_w0d0 <- length(which(nhefs$weakheart == 0 & nhefs$death == 0))
+```
+
+
+We use these numbers to populate our two-by-two table to see the risk of death as of 1992 by heart medication use in 1971 among NHEFS participants who completed a baseline medical survey:
+
+```{r twobytwo-out}
+#| echo: false
+library(data.table)
+library(knitr)
+library(kableExtra)
+
+ttab <- data.table(outcome = c("Death, 1992", "Death, 1992", "Total"),
+                   outcome_level = c("Yes", "No", " "),
+                   hm_yes = c(len_w1d1, len_w1d0, len_w1d1 + len_w1d0),
+                   hm_no = c(len_w0d1, len_w0d0, len_w0d1 + len_w0d0))
+
+kbl(ttab,
+    caption = "Risk of death by medication history (n = 1,629)",
+    col.names = c(" ", " ", "Yes", "No"),
+    booktabs = T) |>
+  kable_paper(full_width = F) |>
+  collapse_rows(columns = 1, valign = "middle") |>
+  add_header_above(c(" " = 2, "Heart medication, 1971" = 2))
+```
+
+We can now calculate the risk of death in each exposure group (here, we arbitrarily define taking heart medication as exposure, but we could also choose not taking heart medication as an exposure), and divide the risks to yield their ratio:
+
+$$\text{Risk ratio} = \frac{\text{Risk among exposed}}{\text{Risk among unexposed}} = \frac{ \left( \frac{17}{36} \right)}{ \left( \frac{301}{1593} \right) } = 2.50$$ We can also use R as a calculator for this equation:
+
+```{r rr-manual}
+rr <- (17/36) / (301/1593)
+# 2.499169
+rr
+```
+
+### Step 2.1b. Calculate the standard error for the risk ratio
+
+Referencing our two-by-two table, we use the number (*n*) of participants in each "cell" to calculate the standard error around the risk ratio. For clarity and brevity, we refer to participants who died as "cases", and those who did not as "non-cases"; here, again, exposed participants took heart medication while unexposed participants did not, indicating exposure and "case" status, where "case" can refer to any outcome.
+
+\begin{equation}
+\begin{split}
+\text{SE(ln(RR))} & = \\
+& = \sqrt{ \frac{1}{n_{\text{exp case}}} + \frac{1}{n_{\text{unexp case}}} - \frac{1}{n_{\text{exp case}} + n_{\text{exp noncase}}} - \frac{1}{n_{\text{unexp case}} + n_{\text{unexp noncase}}} } \\
+& = \sqrt{\frac{1}{17} + \frac{1}{301} - \frac{1}{17 + 19} - \frac{1}{301+1292}} \\
+& = 0.1836852 \\ 
+& = 0.18
+\end{split}
+\end{equation}
+
+Again, we could have used R as a calculator:
+
+```{r rr-manual-se}
+rrse <- sqrt((1/17) + (1/301) - (1/(17+19)) - (1/(301+1292)))
+# 0.1836852
+rrse
+```
+
+### Step 2.1c. Calculate the 95% confidence interval for the risk ratio
+
+We now use our standard error and risk ratio to calculate the confidence interval around the risk ratio:
+
+\begin{equation}
+\begin{split}
+\text{CI(RR)} & = e^{ln(RR) \pm z \times SE(RR)} \\
+\text{95\% CI(RR)} & = e^{ln(RR) \pm 1.96 \times SE(RR)} \\
+& = e^{ln(2.499169)\pm(1.96\times0.1836852)} \\
+& = (1.74 - 3.58)
+\end{split}
+\end{equation}
+
+Note that when we use R to calculate the confidence interval, we will use the `log()` function, which R interprets as a **natural log** (not log base-ten):
+
+```{r rr-manual-ci}
+# Calculate the upper bound
+rrupp <- exp(log(rr) + 1.96 * rrse)
+# 3.582215
+
+# Calculate the lower bound
+rrlow <- exp(log(rr) - 1.96 * rrse)
+# 1.743571
+
+c(RR = rr, RRse = rrse, ll95 = rrlow, ul95 = rrupp) |>
+  round(digits = 3)
+```
+
+### Step 2.1d. Calculate the risk difference
+
+We can now use the same quantities to calculate the risk difference:
+
+\begin{equation}
+\begin{split}
+\text{Risk difference} & = \text{Risk among exposed} - \text{Risk among unexposed} \\
+& = \left( \frac{17}{36} \right) - \left( \frac{301}{1593} \right) \\
+& = 0.2832706 \\
+& = 0.28
+\end{split}
+\end{equation}
+
+```{r rd-manual}
+rd <- (17/36) - (301/1593)
+# 0.2832706
+
+rd
+```
+
+### Step 2.1e. Calculate the standard error for the risk difference
+
+We can now use the above quantities of the risk among the exposed ($R_1$), risk among the unexposed ($R_0$), and the number of participants in each exposure group to calculate the standard error:
+
+\begin{equation}
+\begin{split}
+\text{SE(RD)} & = \sqrt{ \frac{\text{Risk}_{\text{exposed}} (1 - \text{Risk}_{\text{exposed}})}{n_{\text{exposed}}} + \frac{\text{Risk}_{\text{unexposed}} (1 - \text{Risk}_{\text{exposed}})}{n_{\text{unexposed}}}} \\
+& = \sqrt{ \frac{(17/36) \times [1-(17/36)]}{36} + \frac{(301/1593) \times [1-(301/1593)]}{1593} } \\
+& = 0.08378074 \\ 
+& = 0.08
+\end{split}
+\end{equation}
+
+Once again, we could use R as a calculator:
+
+```{r rd-manual-se}
+rdse <- sqrt((((17/36) * (1 - (17/36))) / 36) +
+             ((301/1593) * (1 - (301/1593)) / 1593))
+# 0.08378074
+rdse
+```
+
+### Step 2.1f. Calculate the confidence interval for the risk difference
+
+Lastly, we use the standard error to calculate a confidence interval around the risk difference:
+
+\begin{equation}
+\begin{split}
+\text{CI(RD)} & = RD \pm z \times SE \\
+\text{95\% CI(RD)} & = RD \pm 1.96 \times SE \\
+& = 0.2832706 \pm (1.96 \times 0.08378074) \\
+& = (0.12, 0.45)
+\end{split}
+\end{equation}
+
+```{r rd-manual-ci}
+# Calculate the upper bound
+rdupp <- rd + (1.96 * rdse)
+# 0.4474809
+
+# Calculate the lower bound
+rdlow <- rd - (1.96 * rdse)
+# 0.1190603
+
+c(RD = rd, RDse = rdse, ll95 = rdlow, ul95 = rdupp) |>
+  round(digits = 3)
+```
+
+## 2.2 Direct estimation of a risk difference using linear models
+
+We can fit a linear model in R by using either the `lm()` (which uses an ordinary least squares model) or `glm()` (maximum likelihood estimation) function from the `stats` package, and extract $\beta_1$, which is the average risk difference. We can use tidy from the `broom` package to include the 95% confidence interval in our model output. 
+
+Linear model fit using ordinary least squares:
+
+```{r rd-direct-lm}
+lm_fit <- lm(death ~ weakheart, data = nhefs)
+tidy(lm_fit, conf.int = TRUE)
+```
+
+Generalized linear model fit using the method of maximum likelihood:
+
+```{r rd-direct-glm}
+glm_fit <- glm(death ~ weakheart,
+               data = nhefs,
+               family = gaussian(link = "identity"))
+tidy(glm_fit, conf.int = TRUE)
+```
+
+
+# 2.3 Direct estimation of a risk ratio using a log-binomial regression model
+
+## Step 1. Fit a log-binomial regression for the relationship between heart medication and mortality
+
+We can fit a log-binomial regression model in R by using the `glm()` function from the `stats` package by specifying a binomial error distribution and a (natural) log link, which is passed to the `family` argument of `glm()` as shown below. We extract $\beta_1$ and use `tidy()` from the `broom` package to exponentiate the coefficient, yielding a risk ratio, and include the 95% confidence interval in our model output.
+
+```{r rr-direct-logbin}
+lbin_fit <- glm(death ~ weakheart,
+                data = nhefs,
+                family = binomial(link = "log"))
+
+tidy(lbin_fit, exponentiate = TRUE, conf.int = TRUE)
+```
+
+We could also use the `logbin` package, which implements several subroutines that may avoid commonly encountered convergence issues with the log-binomial model
+
+```{r rr-direct-logbin-pkg, warning = FALSE}
+logbin_fit <- logbin(death ~ weakheart,
+                     data = nhefs,
+                     method = "glm")
+
+summary(logbin_fit)
+```
+
+# 2.4 Direct estimation of a risk ratio using a modified Poisson model
+
+## Step 1. Fit a Poisson regression for the relationship between heart medication and mortality
+
+We can fit a log-binomial regression model in R by using the `glm()` function from the `stats` package by specifying a Poisson error distribution and a (natural) log link, which is passed to the `family` argument of `glm()` as shown below. We extract $\beta_1$ and use `tidy()` from the `broom` package to expontentiate the coefficient, yielding a risk ratio, and include the 95% confidence interval in our model output.
+
+```{r direct-poisson}
+poisson_fit <- glm(death ~ weakheart,
+                   data = nhefs,
+                   family = poisson(link = log))
+
+tidy(poisson_fit, exponentiate = TRUE, conf.int = TRUE)
+```
+
+## Step 2. Calculate "robust" standard errors using the sandwich estimator
+
+Because we are using Poisson regression to model a binary outcome, and because binary outcomes follow a *binomial* error distribution, the Poisson model is misspecified in the sense that it will not produce valid standard errors for coefficient estimates. The sandwich estimator "corrects" these standard errors to account for the misspecification.
+
+We begin by estimating the covariance matrix using the `vcov()` function from the `sandwich` package.
+
+```{r pois-cov-matrix}
+# Calculate the covariance matrix using 'HC0' (refers to the sandwich estimator)
+covmat <- vcovHC(poisson_fit, type = "HC0")
+covmat
+```
+
+The diagonal of this covariance matrix contains the estimated variances for each coefficient---in this case, the intercept ($\beta_0$) and `weakheart` ($\beta_1$). Therefore, to calculate the standard errors for each coefficient, we extract the diagonal using the `diag()` function and take the square root.
+
+The code below carries out these additional steps and uses the robust standard errors to calculate 95% confidence intervals for the coefficients on the (natural) log scale.
+
+```{r robust-se-table}
+#Calculate the standard error
+se <- sqrt(diag(covmat))
+
+# Bind together model output
+#  1. exponentiated coefficients
+#  2. robust standard errors
+#  3. 95% confidence intervals
+# Note that qnorm(0.975) approximately equals 1.96
+model_output <- cbind(
+  Estimate = exp(coef(poisson_fit)),
+  `Robust SE` = se,
+  Lower = exp(coef(poisson_fit) - qnorm(0.975) * se),
+  Upper = exp(coef(poisson_fit) + qnorm(0.975) * se)
+)
+
+# Coerce model_output into a data frame
+# Return second row to focus on the weekheart variable
+model_output <- as.data.frame(model_output)
+knitr::kable(model_output[2, ], digits = 4)
+```
+
+## Step 3. Estimate 95% confidence limits for the risk ratio via non-parametric bootstrapping.
+
+```{r rr-pois-bootstrap, fig.asp = 0.5}
+# First, write a function that
+#  1. takes the data
+#  2. indexes the data to create a bootstrap replicate
+#  3. fits a Poisson model to the indexed data
+#  4. returns the estimated risk ratio
+bootpois = function(dat, indices){
+  fit <- glm(death ~ weakheart,
+             family = poisson(link = log),
+             data = dat[indices, ])
+  return(exp(coef(fit))[2])
+}
+
+# Set seed
+set.seed(2999)
+
+# Use the boot() function combined with the bootpois() function we wrote
+boot_estimate <- boot(
+  data = nhefs,
+  statistic = bootpois,
+  R = 1999,
+  parallel = "multicore",
+  ncpus = 6
+)
+
+plot(boot_estimate)
+
+# Calculate bootstrapped confidence intervals
+bci <- boot.ci(boot.out = boot_estimate,
+               type = c('perc', 'bca'))
+
+print(bci)
+```
+
+
+
+# 2.5 Indirect estimation of risk ratio and risk difference from logistic regression models
+
+## 2.5.1 Implementing the procedure yourself in R
+
+We can fit a logistic regression model in R by using the `glm()` function from the `stats` package by specifying a binomial error distribution, as shown below. The `binomial()` function uses a logit link by default. 
+
+### Step 1. Fit a logistic regression for the relationship between heart medication and mortality
+
+```{r indirect-logit-fit}
+fit1 <- glm(death ~ weakheart,
+            data = nhefs,
+            family = binomial())
+```
+
+### Step 2. Predict the expected probability of death for each weakheart group.
+
+Calculate the risk ratio's numerator as $Pr(death = 1 | weakheart = 1)$:
+
+```{r indirect-logit-predict-w1}
+prd1_w1 <- predict(fit1,
+                    newdata = data.frame(weakheart = 1),
+                    type = "response")
+prd1_w1
+```
+
+Calculate the risk ratio's denominator as $Pr(death = 1 | weakheart = 0)$:
+
+```{r indirect-logit-predict-w0}
+prd1_w0 <- predict(fit1,
+                    newdata = data.frame(weakheart = 0),
+                    type = "response")
+prd1_w0
+```
+
+Calculate the risk ratio:
+
+```{r indirect-logit-rr-est}
+rr_indirect <- prd1_w1 / prd1_w0
+rr_indirect
+```
+
+Calculate the risk difference:
+
+```{r indirect-logit-rd-est}
+rd_indirect <- prd1_w1 - prd1_w0
+rd_indirect
+```
+
+Here are the results of each step in the procedure thus far:
+
+```{r}
+sumlogit_ests <-c("Crude Pr(death = 1)" = mean(nhefs$death), 
+                  "Predicted Pr(death = 1 | weakheart = 1)" = unname(prd1_w1),
+                  "Predicted Pr(death = 1 | weakheart = 0)" = unname(prd1_w0),
+                  "Risk ratio" = unname(rr_indirect),
+                  "Risk difference" = unname(rd_indirect),
+                  "Odds ratio" = unname(exp(coef(fit1)[2])))
+
+
+data.frame(Measure = names(sumlogit_ests),
+           Estimate = round(unname(sumlogit_ests), 3)) |>
+  kableExtra::kbl(booktabs = T, linesep = "") |>
+  kableExtra::kable_styling(latex_options = "HOLD_position")
+```
+
+### Step 3. Estimate 95% confidence limits for the risk ratio via non-parametric boostrapping.
+
+The basic aim of bootstrapping is to approximate the hypothetical sampling distribution upon which frequentist statistics are based [@Efron1994-introduction]. The general procedure involves the following steps:
+
+1) Draw _B_ samples from your dataset with replacement.
+   - Each element of _B_ is referred to as a _bootstrap replicate_
+   - We usually set _B_ to a large number (_e.g._, at least 999). The specific choice must be dictated by specific features of your dataset and analysis.
+   - Note that because we are sampling the original dataset with replacement, individuals from our original dataset might appear in a single bootstrap replicate 0, 1, or more than 1 time.
+   
+2) Estimate your statistic(s) of interest within each bootstrap replicate.
+   - Essentially, we rerun our entire data analysis within each bootstrap replicate to get a distribution of estimates.
+   - In our case, we will build bootstrapped distributions of _B_ risk ratio estimates and _B_ risk difference estimates.
+   
+3) Calculate standard errors, confidence intervals, and other statistical measures using the bootstrapped distributions of estimates.
+   - In the simplest case, we can extract the lower and upper bounds for a 95% confidence interval by retrieving the 2.5% and 97.5% quantiles of the bootstrap distribution for our estimate.
+
+We could write a program to carry out the procedure above, but thankfully, the `boot` package in R implements these procedures gracefully and with the added benefit of allowing us to use parallel processing to speed up computation. The `boot` package also implements several methods for obtaining bootstrapped confidence limits via simple arguments to its primary function. 
+
+The following subsections describe how to get 95% confidence intervals for our indirect estimates of the risk ratio and risk difference using non-parametric bootstrapping.
+
+
+##### 3a. Write a function to evaluate repeatedly (*i.e.*, within each boostrap replicate).
+
+We begin by writing a function called `estimate_risk_measures()` that:
+
+1)  fits a logistic regression
+2)  extracts the predicted mortality probabilities for each `weakheart` group, and
+3)  returns the estimated risk ratio and risk difference.
+
+We will use this function throughout the rest of the example.
+
+```{r}
+estimate_risk_measures <- function(dat, indices) {
+  # 1. fit logistic model
+  fit <- glm(death ~ weakheart,
+             data = dat[indices, ],
+             family = binomial())
+  
+  # 2. get predicted probabilities for each weakheart group
+  
+  ## exposed
+  pred_w1 <- predict(fit,
+                     newdata = data.frame(weakheart = 1),
+                     type = "response")
+  
+  ## unexposed
+  pred_w0 <- predict(fit,
+                     newdata = data.frame(weakheart = 0),
+                     type = "response")
+  
+  # 3. calculate risk ratio and risk difference
+  rr_est <- pred_w1 / pred_w0
+  rd_est <- pred_w1 - pred_w0
+  
+  # 4. return the desired statistics
+  output <- c(RR = rr_est, RD = rd_est)
+  output
+}
+```
+
+In order to play nicely with the `boot` package, our function must take two arguments: the first argument must take our base dataset as its input, while the second must take a vector of numeric indices indicating the sampled observations within a given bootstrap replicate. Note that the `boot()` function will conduct the resampling procedure itself, without our having to do it manually.
+
+
+##### 3b. Run analysis within each bootstrap replicate.
+
+Here we put it all together and run `estimate_risk_measures()` within each of the 1,999 bootstrap replicates we direct the `boot()` function to generate for us. Note, too, that we ask `boot::boot()` to split the process up into multiple "jobs" and run these jobs in parallel vis the `ncpus` argument. (You will typically want to set `ncpus` to one or two fewer than the total number of cores available on a personal machine, so as not to exhaust your computer's resources.)
+
+```{r boot-indirect-rr-rd}
+# set a random number seed for reproducibility
+set.seed(31415)
+
+# Subset the data to those variables we're interested in.
+# Not necessary here, but with very large datasets, could help to
+# avoid memory issues, particularly when using parallel processing.
+nhefs_sub <- nhefs[, c("seqn", "weakheart", "death")]
+
+# run the bootstrap procedure
+indirect_boot <- boot::boot(
+  data = nhefs_sub,
+  statistic = estimate_risk_measures,
+  R = 1999,
+  parallel = "multicore",
+  ncpus = 4
+)
+
+indirect_boot
+```
+
+The output above gives us the specification of our bootstrap job (that is, the _Call_) along with bootstrapped estimates of bias and standard error for our risk ratio (row 1) and risk difference (row 2). Be mindful of the order in which we exported our statistics within `estimate_risk_measures()`.
+
+We can plot a histogram to summarize the bootstrapped distribution of risk ratios and risk differences.
+
+```{r indirect-boot-rr}
+#| fig.cap: Bootstrapped distribution of risk ratios
+plot(indirect_boot, index = 1)
+```
+```{r indirect-bootplot-rd}
+#| fig.cap: Bootstrapped distribution of risk differences
+plot(indirect_boot, index = 2)
+```
+
+##### 3c. Calculate bootstrapped 95% confidence intervals
+
+In the code below, we ask `boot()` for both the standard percentile and bias-corrected and adjusted (BCa) confidence intervals via the `type` argument. These methods have strengths and drawbacks that depend on the statistic of interest [@Chernick2009-revisiting], though BCa intervals may be preferable for general purpose estimation of common point estimates in epidemiology [@Carpenter2000-bootstrap].
+
+Bootstrapped confidence intervals for the risk ratio:
+
+```{r bootrr-ci}
+indirect_boot_ci_rr <- boot::boot.ci(
+  indirect_boot,
+  index = 1,  # risk ratio
+  conf = 0.95,
+  type = c("perc", "bca") 
+)
+
+indirect_boot_ci_rr
+```
+
+Bootstrapped confidence intervals for the risk difference:
+
+```{r bootrd-ci}
+indirect_boot_ci_rd <- boot::boot.ci(
+  indirect_boot,
+  index = 2,  # risk difference
+  conf = 0.95,
+  type = c("perc", "bca")
+)
+
+indirect_boot_ci_rd
+```
+
+
+## 2.5.2 Estimating a risk ratio using the `logisticRR` package
+
+The `logisticRR` package will estimate marginal and conditional risk ratios using logistic regression via a simple interface. Below is an example of a simple specification.
+
+```{r indirect-logisticrr}
+rr_lrr <- logisticRR::logisticRR(death ~ weakheart,
+                                 data = nhefs,
+                                 boot = TRUE,
+                                 n.boot = 1999)
+
+```
+The `logisticRR()` function will conduct bootstrapping and calculate an estimate of the risk ratio's variance using the Delta method.
+
+We can extract the appropriate quantiles for a 95% confidence interval from the bootstrap distribution produced by `logisticRR` as follows.
+
+```{r indirect-logistic-rr-boot}
+quantile(rr_lrr$boot.rr, c(0.025, 0.975))
+```
+We could also construct 95% confidence intervals using the estimate of the variance based on the Delta method:
+
+```{r indirect-logistic-rr-delta}
+c(log(rr_lrr$RR) - 1.96 * rr_lrr$delta.var,
+  log(rr_lrr$RR) + 1.96 * rr_lrr$delta.var) |> exp()
+```
+
+## References
+
+::: {#refs}
+:::
+
+## Session Information
+
+```{r}
+sessioninfo::session_info()
+```
