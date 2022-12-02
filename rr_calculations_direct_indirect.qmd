@@ -37,7 +37,7 @@ standalone: true
 
 \newpage
 
-For ease of reference, the following sections in this supplementary file share the numbered headings of the main manuscript to which they correspond. In addition, we have suppressed supporting citations for material already discussed and cited in the main manuscript.
+For ease of reference, the following sections in this supplementary file share the headings of the main manuscript to which they correspond. In addition, we have suppressed supporting citations for material already discussed and cited in the main manuscript.
 
 # Applied example using clinical data to calculate a crude risk ratio and risk difference
 
