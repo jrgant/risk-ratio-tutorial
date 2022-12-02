@@ -1,6 +1,6 @@
 ---
 title: "Online Supplement"
-subtitle: "Comparing Methods to Calculate Risk and Prevalence Ratios and Differences in R: Developing Intuition with a Hands-on Tutorial and Code"
+subtitle: "Calculating risk and prevalence ratios and differences in R: Developing intuition with a hands-on tutorial and code"
 
 author: 
   - name: Rachel R. Yorlets
