@@ -227,7 +227,7 @@ We can now use the above quantities of the risk among the exposed ($R_1$), risk 
 
 \begin{equation}
 \begin{split}
-\text{SE(RD)} & = \sqrt{ \frac{\text{Risk}_{\text{exposed}} (1 - \text{Risk}_{\text{exposed}})}{n_{\text{exposed}}} + \frac{\text{Risk}_{\text{unexposed}} (1 - \text{Risk}_{\text{exposed}})}{n_{\text{unexposed}}}} \\
+\text{SE(RD)} & = \sqrt{ \frac{\text{Risk}_{\text{exposed}} (1 - \text{Risk}_{\text{exposed}})}{n_{\text{exposed}}} + \frac{\text{Risk}_{\text{unexposed}} (1 - \text{Risk}_{\text{unexposed}})}{n_{\text{unexposed}}}} \\
 & = \sqrt{ \frac{(17/36) \times [1-(17/36)]}{36} + \frac{(301/1593) \times [1-(301/1593)]}{1593} } \\
 & = 0.08378074 \\ 
 & = 0.08
