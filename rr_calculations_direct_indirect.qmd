@@ -3,27 +3,10 @@ title: "Online Supplement"
 subtitle: "Calculating risk and prevalence ratios and differences in R: Developing intuition with a hands-on tutorial and code"
 
 author: Rachel R. Yorlets, Youjin Lee, Jason R. Gantenberg
-# author: 
-#   - name: Rachel R. Yorlets
-#     affiliations:
-#       - Department of Epidemiology, Brown University School of Public Health, Providence, RI, USA 
-#   - name: Youjin Lee
-#     affiliations:
-#       - Department of Biostatistics, Brown University School of Public Health, Providence, RI, USA 
-#   - name: Jason R. Gantenberg
-#     affiliations: 
-#       - Department of Health Services, Policy & Practice, Brown University School of Public Health, Providence, RI, USA
 
 bibliography: references.bib
 
 format:
-  #html:
-  #  toc: true
-  #  toc-depth: 2
-  #  toc-location: left
-  #  code-fold: show
-  #  html-math-method: katex
-  #  standalone: true
   pdf:
     toc: true
     toc-depth: 1
