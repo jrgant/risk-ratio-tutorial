@@ -2,6 +2,7 @@
 title: "Online Supplement"
 subtitle: "Calculating risk and prevalence ratios and differences in R: Developing intuition with a hands-on tutorial and code"
 
+author: Rachel R. Yorlets, Youjin Lee, Jason R. Gantenberg
 # author: 
 #   - name: Rachel R. Yorlets
 #     affiliations:
