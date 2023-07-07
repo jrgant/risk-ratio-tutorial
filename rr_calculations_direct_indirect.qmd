@@ -15,13 +15,13 @@ format:
       text: |
         \usepackage{multirow}
         
-number-sections: false
+number-sections: true
 standalone: true
 ---
 
 \newpage
 
-For ease of reference, the following sections in this supplementary file share the (unnumbered) headings of the main manuscript to which they correspond. In addition, we have suppressed supporting citations for material already discussed and cited in the main manuscript.
+For ease of reference, the following sections and their section numbers in this supplementary file indicate the section of the main paper to which they correspond. We also have suppressed supporting citations for material already discussed and cited in the paper.
 
 We provide code written in the R language [@Rcore2023-r] because of the software’s flexibility, open-source nature, and increasing popularity among epidemiologists. R users need not pay fees, maintain an institutional affiliation, nor obtain a license to install or update the software, which works on any machine. Researchers who use R are therefore able to share (and teach) code that can be easily downloaded and run by others, improving reproducibility and facilitating real-time collaborations [@Kopp2021-covid].
 
@@ -256,7 +256,7 @@ c(RD = rd, RDse = rdse, ll95 = rdlow, ul95 = rdupp) |>
   round(digits = 3)
 ```
 
-## Direct estimation of a risk difference using linear models
+# Direct estimation of a risk difference using a linear model
 
 We can fit a linear model in R by using either the `lm()` (which uses an ordinary least squares model) or `glm()` (maximum likelihood estimation) function from the `stats` package, and extract $\beta_1$, which is the average risk difference. We can use tidy from the `broom` package to include the 95% confidence interval in our model output. 
 
@@ -391,7 +391,7 @@ print(bci)
 
 
 
-# Indirect estimation of risk ratio and risk difference from logistic regression models
+# Indirect estimation of a risk ratio from a logistic regression model
 
 ## Implementing the procedure yourself in R
 
@@ -432,7 +432,7 @@ rr_indirect <- prd1_w1 / prd1_w0
 rr_indirect
 ```
 
-Calculate the risk difference:
+Note that we can also calculate the risk difference using the predicted outcome probabilities for each exposure group: 
 
 ```{r indirect-logit-rd-est}
 rd_indirect <- prd1_w1 - prd1_w0
