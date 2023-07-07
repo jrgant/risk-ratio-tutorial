@@ -227,7 +227,7 @@ rdse <- sqrt((((17/36) * (1 - (17/36))) / 36) +
 rdse
 ```
 
-### Step 6.1f. Calculate the confidence interval for the risk difference
+### Step 6. Calculate the confidence interval for the risk difference
 
 Lastly, we use the standard error to calculate a confidence interval around the risk difference:
 
