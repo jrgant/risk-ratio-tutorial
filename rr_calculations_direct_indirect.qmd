@@ -21,7 +21,10 @@ standalone: true
 
 \newpage
 
-For ease of reference, the following sections in this supplementary file share the headings of the main manuscript to which they correspond. In addition, we have suppressed supporting citations for material already discussed and cited in the main manuscript.
+For ease of reference, the following sections in this supplementary file share the (unnumbered) headings of the main manuscript to which they correspond. In addition, we have suppressed supporting citations for material already discussed and cited in the main manuscript.
+
+We provide code written in the R language [@Rcore2023-r] because of the software’s flexibility, open-source nature, and increasing popularity among epidemiologists. R users need not pay fees, maintain an institutional affiliation, nor obtain a license to install or update the software, which works on any machine. Researchers who use R are therefore able to share (and teach) code that can be easily downloaded and run by others, improving reproducibility and facilitating real-time collaborations [@Kopp2021-covid].
+
 
 # Applied example using clinical data to calculate a crude risk ratio and risk difference
 
