@@ -1,28 +1,12 @@
 ---
 title: "Online Supplement"
-subtitle: "Comparing Methods to Calculate Risk and Prevalence Ratios and Differences in R: Developing Intuition with a Hands-on Tutorial and Code"
+subtitle: "Calculating risk and prevalence ratios and differences in R: Developing intuition with a hands-on tutorial and code"
 
-author: 
-  - name: Rachel R. Yorlets
-    affiliations:
-      - Department of Epidemiology, Brown University School of Public Health, Providence, RI, USA 
-  - name: Youjin Lee
-    affiliations:
-      - Department of Biostatistics, Brown University School of Public Health, Providence, RI, USA 
-  - name: Jason R. Gantenberg
-    affiliations: 
-      - Department of Health Services, Policy & Practice, Brown University School of Public Health, Providence, RI, USA
+author: Rachel R. Yorlets, Youjin Lee, Jason R. Gantenberg
 
 bibliography: references.bib
 
 format:
-  #html:
-  #  toc: true
-  #  toc-depth: 2
-  #  toc-location: left
-  #  code-fold: show
-  #  html-math-method: katex
-  #  standalone: true
   pdf:
     toc: true
     toc-depth: 1
@@ -37,9 +21,9 @@ standalone: true
 
 \newpage
 
-For ease of reference, the following sections in this supplementary file share the numbered headings of the main manuscript to which they correspond. In addition, we have suppressed supporting citations for material already discussed and cited in the main manuscript.
+For ease of reference, the following sections in this supplementary file share the headings of the main manuscript to which they correspond. In addition, we have suppressed supporting citations for material already discussed and cited in the main manuscript.
 
-# 2. Applied example using clinical data to calculate a crude risk ratio and risk difference
+# Applied example using clinical data to calculate a crude risk ratio and risk difference
 
 ```{r setup}
 # install the pacman package if not already installed
@@ -84,9 +68,9 @@ missing_plot(
 
 Noting that we have no missingness in our analytic variables, we can proceed.
 
-# 2.1 Direct estimation of a risk ratio and risk difference by hand
+# Direct estimation of a risk ratio and risk difference by hand
 
-### Step 2.1a. Calculate the risk ratio
+### Step 1. Calculate the risk ratio
 
 We can use R to calculate the number of participants who did or did not die by 1992, and stratify them by whether they took heart medication in 1971.
 
@@ -151,7 +135,7 @@ rr <- (17/36) / (301/1593)
 rr
 ```
 
-### Step 2.1b. Calculate the standard error for the risk ratio
+### Step 2. Calculate the standard error for the risk ratio
 
 Referencing our two-by-two table, we use the number (*n*) of participants in each "cell" to calculate the standard error around the risk ratio. For clarity and brevity, we refer to participants who died as "cases", and those who did not as "non-cases"; here, again, exposed participants took heart medication while unexposed participants did not, indicating exposure and "case" status, where "case" can refer to any outcome.
 
@@ -173,7 +157,7 @@ rrse <- sqrt((1/17) + (1/301) - (1/(17+19)) - (1/(301+1292)))
 rrse
 ```
 
-### Step 2.1c. Calculate the 95% confidence interval for the risk ratio
+### Step 3. Calculate the 95% confidence interval for the risk ratio
 
 We now use our standard error and risk ratio to calculate the confidence interval around the risk ratio:
 
@@ -201,7 +185,7 @@ c(RR = rr, RRse = rrse, ll95 = rrlow, ul95 = rrupp) |>
   round(digits = 3)
 ```
 
-### Step 2.1d. Calculate the risk difference
+### Step 4. Calculate the risk difference
 
 We can now use the same quantities to calculate the risk difference:
 
@@ -221,13 +205,13 @@ rd <- (17/36) - (301/1593)
 rd
 ```
 
-### Step 2.1e. Calculate the standard error for the risk difference
+### Step 5. Calculate the standard error for the risk difference
 
 We can now use the above quantities of the risk among the exposed ($R_1$), risk among the unexposed ($R_0$), and the number of participants in each exposure group to calculate the standard error:
 
 \begin{equation}
 \begin{split}
-\text{SE(RD)} & = \sqrt{ \frac{\text{Risk}_{\text{exposed}} (1 - \text{Risk}_{\text{exposed}})}{n_{\text{exposed}}} + \frac{\text{Risk}_{\text{unexposed}} (1 - \text{Risk}_{\text{exposed}})}{n_{\text{unexposed}}}} \\
+\text{SE(RD)} & = \sqrt{ \frac{\text{Risk}_{\text{exposed}} (1 - \text{Risk}_{\text{exposed}})}{n_{\text{exposed}}} + \frac{\text{Risk}_{\text{unexposed}} (1 - \text{Risk}_{\text{unexposed}})}{n_{\text{unexposed}}}} \\
 & = \sqrt{ \frac{(17/36) \times [1-(17/36)]}{36} + \frac{(301/1593) \times [1-(301/1593)]}{1593} } \\
 & = 0.08378074 \\ 
 & = 0.08
@@ -243,7 +227,7 @@ rdse <- sqrt((((17/36) * (1 - (17/36))) / 36) +
 rdse
 ```
 
-### Step 2.1f. Calculate the confidence interval for the risk difference
+### Step 6.1f. Calculate the confidence interval for the risk difference
 
 Lastly, we use the standard error to calculate a confidence interval around the risk difference:
 
@@ -269,7 +253,7 @@ c(RD = rd, RDse = rdse, ll95 = rdlow, ul95 = rdupp) |>
   round(digits = 3)
 ```
 
-## 2.2 Direct estimation of a risk difference using linear models
+## Direct estimation of a risk difference using linear models
 
 We can fit a linear model in R by using either the `lm()` (which uses an ordinary least squares model) or `glm()` (maximum likelihood estimation) function from the `stats` package, and extract $\beta_1$, which is the average risk difference. We can use tidy from the `broom` package to include the 95% confidence interval in our model output. 
 
@@ -290,7 +274,7 @@ tidy(glm_fit, conf.int = TRUE)
 ```
 
 
-# 2.3 Direct estimation of a risk ratio using a log-binomial regression model
+# Direct estimation of a risk ratio using a log-binomial regression model
 
 ## Step 1. Fit a log-binomial regression for the relationship between heart medication and mortality
 
@@ -314,7 +298,7 @@ logbin_fit <- logbin(death ~ weakheart,
 summary(logbin_fit)
 ```
 
-# 2.4 Direct estimation of a risk ratio using a modified Poisson model
+# Direct estimation of a risk ratio using a modified Poisson model
 
 ## Step 1. Fit a Poisson regression for the relationship between heart medication and mortality
 
@@ -404,9 +388,9 @@ print(bci)
 
 
 
-# 2.5 Indirect estimation of risk ratio and risk difference from logistic regression models
+# Indirect estimation of risk ratio and risk difference from logistic regression models
 
-## 2.5.1 Implementing the procedure yourself in R
+## Implementing the procedure yourself in R
 
 We can fit a logistic regression model in R by using the `glm()` function from the `stats` package by specifying a binomial error distribution, as shown below. The `binomial()` function uses a logit link by default. 
 
@@ -601,7 +585,7 @@ indirect_boot_ci_rd
 ```
 
 
-## 2.5.2 Estimating a risk ratio using the `logisticRR` package
+## Estimating a risk ratio using the `logisticRR` package
 
 The `logisticRR` package will estimate marginal and conditional risk ratios using logistic regression via a simple interface. Below is an example of a simple specification.
 
