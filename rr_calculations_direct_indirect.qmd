@@ -256,24 +256,62 @@ c(RD = rd, RDse = rdse, ll95 = rdlow, ul95 = rdupp) |>
   round(digits = 3)
 ```
 
-# Direct estimation of a risk difference using a linear model
+# Direct estimation of a risk difference using linear probability models
 
-We can fit a linear model in R by using either the `lm()` (which uses an ordinary least squares model) or `glm()` (maximum likelihood estimation) function from the `stats` package, and extract $\beta_1$, which is the average risk difference. We can use tidy from the `broom` package to include the 95% confidence interval in our model output. 
+We can estimate the risk difference directly using a variety of linear probability models for binary outcomes. Some common choices include the following:
 
-Linear model fit using ordinary least squares:
+1. ordinary least squares (OLS)
+2. maximum likelihood estimation via generalized linear models, all using an identity link but different probability distributions:
+   a) binomial (correctly specified) 
+   b) Poisson (incorrectly specified)
+   c) Gaussian (incorrectly specified)
+   
+The OLS model and the GLM with a Gaussian distribution are equivalent. Both of these models and the Poisson GLM require the use of a "robust" sandwich estimator to estimate the standard error for the risk difference in order to account for misspecification of the probability distribution (see Section \ref{sec-rr-sandwich} for further explication in the context of the risk ratio). The GLM using a binomial probability distribution requires no such correction.
+
+OLS:
 
 ```{r rd-direct-lm}
 lm_fit <- lm(death ~ weakheart, data = nhefs)
-tidy(lm_fit, conf.int = TRUE)
+
+# extract the variance for the weakheart coeffient and
+# take the square root to get the standard error
+c(RD = coef(lm_fit)[2],
+  RobustSE = sqrt(diag(vcovHC(lm_fit, type = "HC0"))[2]))
 ```
 
-Generalized linear model fit using the method of maximum likelihood:
+GLM, binomial distribution:
 
-```{r rd-direct-glm}
-glm_fit <- glm(death ~ weakheart,
-               data = nhefs,
-               family = gaussian(link = "identity"))
-tidy(glm_fit, conf.int = TRUE)
+```{r rd-direct-glm-lin-bin}
+glm_lin_bin_fit <- glm(death ~ weakheart,
+                       data = nhefs,
+                       family = binomial(link = "identity"))
+
+# note we use the standard variance-covariance matrix extractor
+# no need for sandwich estimator under the correct probability distribution
+c(RD = coef(glm_lin_bin_fit)[2],
+  SE = sqrt(diag(vcov(glm_lin_bin_fit))[2]))
+```
+
+GLM, Gaussian distribution:
+
+```{r rd-direct-glm-lin-gaussian}
+glm_lin_gauss_fit <- glm(death ~ weakheart,
+                     data = nhefs,
+                     family = gaussian(link = "identity"))
+
+c(RD = coef(glm_lin_gauss_fit)[2],
+  RobustSE = sqrt(diag(vcovHC(glm_lin_gauss_fit, type = "HC0"))[2]))
+```
+
+GLM, Poisson distribution
+
+```{r rd-direct-glm-lin-pois}
+glm_lin_pois_fit <- glm(death ~ weakheart,
+                        data = nhefs,
+                        family = poisson(link = "identity"))
+
+c(RD = coef(glm_lin_pois_fit)[2],
+  RobustSE = sqrt(diag(vcovHC(glm_lin_pois_fit, type = "HC0"))[2]))
 ```
 
 
@@ -315,7 +353,7 @@ poisson_fit <- glm(death ~ weakheart,
 tidy(poisson_fit, exponentiate = TRUE, conf.int = TRUE)
 ```
 
-## Step 2. Calculate "robust" standard errors using the sandwich estimator
+## Step 2. Calculate "robust" standard errors using the sandwich estimator {#sec-rr-sandwich}
 
 Because we are using Poisson regression to model a binary outcome, and because binary outcomes follow a *binomial* error distribution, the Poisson model is misspecified in the sense that it will not produce valid standard errors for coefficient estimates. The sandwich estimator "corrects" these standard errors to account for the misspecification.
 
