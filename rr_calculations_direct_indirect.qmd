@@ -258,60 +258,83 @@ c(RD = rd, RDse = rdse, ll95 = rdlow, ul95 = rdupp) |>
 
 # Direct estimation of a risk difference using linear probability models
 
-We can estimate the risk difference directly using a variety of linear probability models for binary outcomes. Some common choices include the following:
+When we have a binary outcome, as we do in our example (death), we can estimate the risk difference directly using linear probability models. We can fit a generalized linear model using a binomial distribution and an identity link, in which case the outcome distribution is correctly specified, and we do not have to adjust the standard error estimates used to calculate confidence limits.
 
-1. ordinary least squares (OLS)
-2. maximum likelihood estimation via generalized linear models, all using an identity link but different probability distributions:
-   a) binomial (correctly specified) 
-   b) Poisson (incorrectly specified)
-   c) Gaussian (incorrectly specified)
-   
-The OLS model and the GLM with a Gaussian distribution are equivalent. Both of these models and the Poisson GLM require the use of a "robust" sandwich estimator to estimate the standard error for the risk difference in order to account for misspecification of the probability distribution (see Section \ref{sec-rr-sandwich} for further explication in the context of the risk ratio). The GLM using a binomial probability distribution requires no such correction.
+In some cases, we may wish to use alternative models. The OLS model and the GLM with a Gaussian distribution are equivalent. Both of these models, plus the GLM using a Poisson distribution, require use of a "robust" sandwich estimator to estimate the standard error for the risk difference. This sandwich estimators accounts for misspecification of the probability distribution, _i.e._, the fact that we are fitting models that assume Gaussian or Poisson distributions to an outcome that follows a binomial distribution. (See Section \ref{sec-rr-sandwich} for further explication in the context of the risk ratio).
 
-OLS:
-
-```{r rd-direct-lm}
-lm_fit <- lm(death ~ weakheart, data = nhefs)
-
-# extract the variance for the weakheart coeffient and
-# take the square root to get the standard error
-c(RD = coef(lm_fit)[2],
-  RobustSE = sqrt(diag(vcovHC(lm_fit, type = "HC0"))[2]))
-```
-
-GLM, binomial distribution:
+Here, we provide code to estimate a risk difference using a **GLM with an identity link and a binomial probability distribution**. Given that, in our example, the outcome death is a binary variable and has a binomial distribution, the model is correctly specified, and no correction is needed for the standard error:
 
 ```{r rd-direct-glm-lin-bin}
 glm_lin_bin_fit <- glm(death ~ weakheart,
                        data = nhefs,
                        family = binomial(link = "identity"))
 
+# extract the coefficient for weakheart
+glm_lin_bin_rd <- unname(coef(glm_lin_bin_fit)[2])
+
 # note we use the standard variance-covariance matrix extractor
 # no need for sandwich estimator under the correct probability distribution
-c(RD = coef(glm_lin_bin_fit)[2],
-  SE = sqrt(diag(vcov(glm_lin_bin_fit))[2]))
+glm_lin_bin_robse <- sqrt(diag(vcov(glm_lin_bin_fit))[2])
+glm_lin_bin_robse <- unname(glm_lin_bin_robse)
+
+c(RD = glm_lin_bin_rd,
+  SE = glm_lin_bin_robse,
+  `95% CL, Lower` = glm_lin_bin_rd - qnorm(0.975) * glm_lin_bin_robse,
+  `95% CL, Upper` = glm_lin_bin_rd + qnorm(0.975) * glm_lin_bin_robse)
 ```
 
-GLM, Gaussian distribution:
+
+Here, we provide code to estimate a risk difference using **OLS**. Because this model is incorrectly specified (assumes a Gaussian distribution when we are working with a binomially distributed outcome), we must estimate "robust" standard errors:
+
+```{r rd-direct-lm}
+lm_fit <- lm(death ~ weakheart, data = nhefs)
+
+# extract the coefficient for weakheart
+lm_fit_rd <- unname(coef(lm_fit)[2])
+
+# extract the variance for the weakheart coeffient and
+# take the square root to get the standard error
+lm_fit_robse <- sqrt(diag(vcovHC(lm_fit, type = "HC0"))[2])
+lm_fit_robse <- unname(lm_fit_robse)
+
+c(RD = lm_fit_rd,
+  RobustSE = lm_fit_robse,
+  `95% CL, Lower` = lm_fit_rd - qnorm(0.975) * lm_fit_robse,
+  `95% CL, Upper` = lm_fit_rd + qnorm(0.975) * lm_fit_robse)
+```
+
+Here, we provide code to estimate a risk difference using a **GLM with an identity link and a Gaussian probability distribution**. Because this model is incorrectly specified (assumes a Gaussian distribution when we are working with a binomially distributed outcome), we must estimate "robust" standard errors:
 
 ```{r rd-direct-glm-lin-gaussian}
 glm_lin_gauss_fit <- glm(death ~ weakheart,
                      data = nhefs,
                      family = gaussian(link = "identity"))
 
-c(RD = coef(glm_lin_gauss_fit)[2],
-  RobustSE = sqrt(diag(vcovHC(glm_lin_gauss_fit, type = "HC0"))[2]))
+glm_lin_gauss_rd <- unname(coef(glm_lin_gauss_fit)[2])
+glm_lin_gauss_robse <- sqrt(diag(vcovHC(glm_lin_gauss_fit, type = "HC0"))[2])
+glm_lin_gauss_robse <- unname(glm_lin_gauss_robse)
+
+c(RD = glm_lin_gauss_rd,
+  RobustSE = glm_lin_gauss_robse,
+  `95% CL, Lower` = glm_lin_gauss_rd - qnorm(0.975) * glm_lin_gauss_robse,
+  `95% CL, Upper` = glm_lin_gauss_rd + qnorm(0.975) * glm_lin_gauss_robse)
 ```
 
-GLM, Poisson distribution
+Here, we provide code to estimate a risk difference using a **GLM with an identity link and a Poisson probability distribution**. Because this model is incorrectly specified (assumes a Poisson distribution when we are working with a binomially distributed outcome), we must estimate "robust" standard errors:
 
 ```{r rd-direct-glm-lin-pois}
 glm_lin_pois_fit <- glm(death ~ weakheart,
                         data = nhefs,
                         family = poisson(link = "identity"))
 
-c(RD = coef(glm_lin_pois_fit)[2],
-  RobustSE = sqrt(diag(vcovHC(glm_lin_pois_fit, type = "HC0"))[2]))
+glm_lin_pois_rd <- unname(coef(glm_lin_pois_fit)[2])
+glm_lin_pois_robse <- sqrt(diag(vcovHC(glm_lin_pois_fit, type = "HC0"))[2])
+glm_lin_pois_robse <- unname(glm_lin_pois_robse)
+
+c(RD = glm_lin_pois_rd,
+  RobustSE = glm_lin_pois_robse,
+  `95% CL, Lower` = glm_lin_pois_rd - qnorm(0.975) * glm_lin_pois_robse,
+  `95% CL, Upper` = glm_lin_pois_rd + qnorm(0.975) * glm_lin_pois_robse)
 ```
 
 
