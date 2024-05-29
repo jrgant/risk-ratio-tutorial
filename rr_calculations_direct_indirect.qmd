@@ -540,7 +540,7 @@ We could write a program to carry out the procedure above, but thankfully, the `
 The following subsections describe how to get 95% confidence intervals for our indirect estimates of the risk ratio and risk difference using non-parametric bootstrapping.
 
 
-## 3a. Write a function to evaluate repeatedly (*i.e.*, within each boostrap replicate).
+## Write a function to evaluate repeatedly (*i.e.*, within each bootstrap replicate).
 
 We begin by writing a function called `estimate_risk_measures()` that:
 
@@ -582,7 +582,7 @@ estimate_risk_measures <- function(dat, indices) {
 In order to play nicely with the `boot` package, our function must take two arguments: the first argument must take our base dataset as its input, while the second must take a vector of numeric indices indicating the sampled observations within a given bootstrap replicate. Note that the `boot()` function will conduct the resampling procedure itself, without our having to do it manually.
 
 
-## 3b. Run analysis within each bootstrap replicate.
+## Run analysis within each bootstrap replicate.
 
 Here we put it all together and run `estimate_risk_measures()` within each of the 1,999 bootstrap replicates we direct the `boot()` function to generate for us. Note, too, that we ask `boot::boot()` to split the process up into multiple "jobs" and run these jobs in parallel vis the `ncpus` argument. (You will typically want to set `ncpus` to one or two fewer than the total number of cores available on a personal machine, so as not to exhaust your computer's resources.)
 
@@ -620,7 +620,7 @@ plot(indirect_boot, index = 1)
 plot(indirect_boot, index = 2)
 ```
 
-## 3c. Calculate bootstrapped 95% confidence intervals
+## Calculate bootstrapped 95% confidence intervals
 
 In the code below, we ask `boot()` for both the standard percentile and bias-corrected and adjusted (BCa) confidence intervals via the `type` argument. These methods have strengths and drawbacks that depend on the statistic of interest [@Chernick2009-revisiting], though BCa intervals may be preferable for general purpose estimation of common point estimates in epidemiology [@Carpenter2000-bootstrap].
 
@@ -676,12 +676,14 @@ c(log(rr_lrr$RR) - 1.96 * rr_lrr$delta.var,
   log(rr_lrr$RR) + 1.96 * rr_lrr$delta.var) |> exp()
 ```
 
-## References
+# References
 
 ::: {#refs}
 :::
 
-## Session Information
+\newpage
+
+# Session Information
 
 ```{r}
 sessioninfo::session_info()
