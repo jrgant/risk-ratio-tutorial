@@ -258,12 +258,13 @@ c(RD = rd, RDse = rdse, ll95 = rdlow, ul95 = rdupp) |>
 
 # Direct estimation of a risk difference using linear probability models
 
-When we have a binary outcome, as we do in our example (death), we can estimate the risk difference directly using linear probability models. We can fit a generalized linear model using a binomial distribution and an identity link, in which case the outcome distribution may be correctly specified, and we do not have to adjust the standard error estimates used to calculate confidence limits.
+When we have a binary outcome, as we do in our example (death), we can estimate the risk difference directly using linear probability models. We can fit a generalized linear model using a binomial distribution and an identity link, in which case the outcome distribution may be correctly specified, and we do not have to adjust the standard error estimates used to calculate confidence limits. (Moving forward, we will make the assumption that all observations are independent and identically distributed, justifying the assertion that the outcome follows a binomial distribution.)
 
 In some cases, we may wish to use alternative models. The OLS model and the GLM with a Gaussian distribution are equivalent. Both of these models, plus the GLM using a Poisson distribution, require use of a "robust" sandwich estimator to estimate the standard error for the risk difference. This sandwich estimator accounts for misspecification of the probability distribution, _i.e._, the fact that we are fitting models that assume Gaussian or Poisson distributions to an outcome that follows a binomial distribution. (See Section \ref{sec-rr-sandwich} for further explication in the context of the risk ratio).
 
 ## Calculate a risk difference by fitting a generalized linear model, specifying an identity link and binomial probability distribution
-Here, we provide code to estimate a risk difference using a **GLM with an identity link and a binomial probability distribution**. Given that, in our example, the outcome death is a binary variable and has a binomial distribution, the model is correctly specified, and no correction is needed for the standard error:
+
+Here, we provide code to estimate a risk difference using a **GLM with an identity link and a binomial probability distribution**. Given that in our example the outcome death is a binary variable and has a binomial distribution, the model is correctly specified; hence, no correction is needed for the standard error:
 
 ```{r rd-direct-glm-lin-bin}
 glm_lin_bin_fit <- glm(death ~ weakheart,
@@ -346,7 +347,7 @@ c(RD = glm_lin_pois_rd,
 
 ## Fit a log-binomial regression for the relationship between heart medication and mortality
 
-We can fit a log-binomial regression model in R by using the `glm()` function from the `stats` package by specifying a binomial error distribution and a (natural) log link, which is passed to the `family` argument of `glm()` as shown below. We extract $\beta_1$ and use `tidy()` from the `broom` package to exponentiate the coefficient, yielding a risk ratio, and include the 95% confidence interval in our model output.
+We can fit a log-binomial regression model in R by using the `glm()` function from the `stats` package by specifying a binomial distribution and a (natural) log link, which is passed to the `family` argument of `glm()` as shown below. We extract $\beta_1$ and use `tidy()` from the `broom` package to exponentiate the coefficient, yielding a risk ratio, and include the 95% confidence interval in our model output.
 
 ```{r rr-direct-logbin}
 lbin_fit <- glm(death ~ weakheart,
@@ -356,7 +357,8 @@ lbin_fit <- glm(death ~ weakheart,
 tidy(lbin_fit, exponentiate = TRUE, conf.int = TRUE)
 ```
 
-We could also use the `logbin` package, which implements several subroutines that may avoid commonly encountered convergence issues with the log-binomial model
+We could also use the `logbin` package, which implements several subroutines that may avoid commonly encountered convergence issues with the log-binomial model:
+
 
 ```{r rr-direct-logbin-pkg, warning = FALSE}
 logbin_fit <- logbin(death ~ weakheart,
@@ -370,7 +372,7 @@ summary(logbin_fit)
 
 ## Fit a Poisson regression for the relationship between heart medication and mortality
 
-We can fit a log-binomial regression model in R by using the `glm()` function from the `stats` package by specifying a Poisson error distribution and a (natural) log link, which is passed to the `family` argument of `glm()` as shown below. We extract $\beta_1$ and use `tidy()` from the `broom` package to expontentiate the coefficient, yielding a risk ratio, and include the 95% confidence interval in our model output.
+We can fit a Poisson regression model in R by using the `glm()` function from the `stats` package by specifying a Poisson distribution and a (natural) log link, which is passed to the `family` argument of `glm()` as shown below. We extract $\beta_1$ and use `tidy()` from the `broom` package to expontentiate the coefficient, yielding a risk ratio, and include the 95% confidence interval in our model output.
 
 ```{r direct-poisson}
 poisson_fit <- glm(death ~ weakheart,
@@ -382,7 +384,7 @@ tidy(poisson_fit, exponentiate = TRUE, conf.int = TRUE)
 
 ## Calculate "robust" standard errors using the sandwich estimator {#sec-rr-sandwich}
 
-Because we are using Poisson regression to model a binary outcome, and because binary outcomes follow a *binomial* error distribution, the Poisson model is misspecified in the sense that it will not produce valid standard errors for coefficient estimates. The sandwich estimator "corrects" these standard errors to account for the misspecification.
+Because we are using Poisson regression to model a binary outcome, and because binary outcomes do not follow a Poisson distribution, the Poisson model is misspecified in the sense that it will not produce valid standard errors for coefficient estimates. The sandwich estimator "corrects" these standard errors to account for the misspecification.
 
 We begin by estimating the covariance matrix using the `vcov()` function from the `sandwich` package.
 
@@ -458,7 +460,7 @@ print(bci)
 
 # Indirect estimation of a risk ratio from a logistic regression model
 
-We can fit a logistic regression model in R by using the `glm()` function from the `stats` package by specifying a binomial error distribution, as shown below. The `binomial()` function uses a logit link by default. 
+We can fit a logistic regression model in R by using the `glm()` function from the `stats` package by specifying a binomial distribution, as shown below. The `binomial()` function uses a logit link by default. 
 
 ## Fit a logistic regression for the relationship between heart medication and mortality
 
