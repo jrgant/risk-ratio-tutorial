@@ -258,9 +258,15 @@ c(RD = rd, RDse = rdse, ll95 = rdlow, ul95 = rdupp) |>
 
 # Direct estimation of a risk difference using linear probability models
 
-When we have a binary outcome, as we do in our example (death), we can estimate the risk difference directly using linear probability models. We can fit a generalized linear model using a binomial distribution and an identity link, in which case the outcome distribution may be correctly specified, and we do not have to adjust the standard error estimates used to calculate confidence limits. (Moving forward, we will make the assumption that all observations are independent and identically distributed, justifying the assertion that the outcome follows a binomial distribution.)
+When we have a binary outcome, as we do in our example (death), we can estimate the risk difference directly using linear probability models. We can fit a generalized linear model using a binomial distribution and an identity link, in which case the outcome distribution may be correctly specified, and we do not have to adjust the standard error estimates used to calculate confidence limits. 
 
-In some cases, we may wish to use alternative models. The OLS model and the GLM with a Gaussian distribution are equivalent. Both of these models, plus the GLM using a Poisson distribution, require use of a "robust" sandwich estimator to estimate the standard error for the risk difference. This sandwich estimator accounts for misspecification of the probability distribution, _i.e._, the fact that we are fitting models that assume Gaussian or Poisson distributions to an outcome that follows a binomial distribution. (See Section \ref{sec-rr-sandwich} for further explication in the context of the risk ratio).
+Moving forward, we will assume that the binary outcomes discussed in this document imply binomially distributed outcomes with respect to the conditional means modeled in GLMs. Therefore, we will refer to the binomial distribution as being the "correct specification", but we note here that other distributions are possible (_e.g._, probit).
+
+Assuming that we have correctly specified the outcome distribution as binomial, we can fit a gen-
+eralized linear model using a binomial distribution and an identity link without needing to adjust
+the standard error estimates used to calculate confidence limits.
+
+In some cases, we may wish to use alternative models. The OLS model and the GLM with a Gaussian distribution are equivalent. Both of these models, plus the GLM using a Poisson distribution, require use of a "robust" sandwich estimator to estimate an unbiased standard error for the risk difference. This sandwich estimator accounts for misspecification of the probability distribution, _i.e._, the fact that we are fitting models that assume Gaussian or Poisson distributions to an outcome that follows a binomial distribution. (See Section \ref{sec-rr-sandwich} for further explication in the context of the risk ratio).
 
 ## Calculate a risk difference by fitting a generalized linear model, specifying an identity link and binomial probability distribution
 
