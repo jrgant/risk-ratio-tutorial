@@ -73,7 +73,7 @@ Noting that we have no missingness in our analytic variables, we can proceed.
 
 # Direct estimation of a risk ratio and risk difference by hand
 
-### Step 1. Calculate the risk ratio
+## Calculate the risk ratio
 
 We can use R to calculate the number of participants who did or did not die by 1992, and stratify them by whether they took heart medication in 1971.
 
@@ -138,7 +138,7 @@ rr <- (17/36) / (301/1593)
 rr
 ```
 
-### Step 2. Calculate the standard error for the risk ratio
+## Calculate the standard error for the risk ratio
 
 Referencing our two-by-two table, we use the number (*n*) of participants in each "cell" to calculate the standard error around the risk ratio. For clarity and brevity, we refer to participants who died as "cases", and those who did not as "non-cases"; here, again, exposed participants took heart medication while unexposed participants did not, indicating exposure and "case" status, where "case" can refer to any outcome.
 
@@ -160,7 +160,7 @@ rrse <- sqrt((1/17) + (1/301) - (1/(17+19)) - (1/(301+1292)))
 rrse
 ```
 
-### Step 3. Calculate the 95% confidence interval for the risk ratio
+## Calculate the 95% confidence interval for the risk ratio
 
 We now use our standard error and risk ratio to calculate the confidence interval around the risk ratio:
 
@@ -188,7 +188,7 @@ c(RR = rr, RRse = rrse, ll95 = rrlow, ul95 = rrupp) |>
   round(digits = 3)
 ```
 
-### Step 4. Calculate the risk difference
+## Calculate the risk difference
 
 We can now use the same quantities to calculate the risk difference:
 
@@ -208,7 +208,7 @@ rd <- (17/36) - (301/1593)
 rd
 ```
 
-### Step 5. Calculate the standard error for the risk difference
+## Calculate the standard error for the risk difference
 
 We can now use the above quantities of the risk among the exposed ($R_1$), risk among the unexposed ($R_0$), and the number of participants in each exposure group to calculate the standard error:
 
@@ -230,7 +230,7 @@ rdse <- sqrt((((17/36) * (1 - (17/36))) / 36) +
 rdse
 ```
 
-### Step 6. Calculate the confidence interval for the risk difference
+## Calculate the confidence interval for the risk difference
 
 Lastly, we use the standard error to calculate a confidence interval around the risk difference:
 
@@ -256,32 +256,104 @@ c(RD = rd, RDse = rdse, ll95 = rdlow, ul95 = rdupp) |>
   round(digits = 3)
 ```
 
-# Direct estimation of a risk difference using a linear model
+# Direct estimation of a risk difference using linear probability models
 
-We can fit a linear model in R by using either the `lm()` (which uses an ordinary least squares model) or `glm()` (maximum likelihood estimation) function from the `stats` package, and extract $\beta_1$, which is the average risk difference. We can use tidy from the `broom` package to include the 95% confidence interval in our model output. 
+When we have a binary outcome, as we do in our example (death), we can estimate the risk difference directly using linear probability models. We can fit a generalized linear model using a binomial distribution and an identity link, in which case the outcome distribution may be correctly specified, and we do not have to adjust the standard error estimates used to calculate confidence limits. 
 
-Linear model fit using ordinary least squares:
+Moving forward, we will assume that the binary outcomes discussed in this document imply binomially distributed outcomes with respect to the conditional means modeled in GLMs. Therefore, we will refer to the binomial distribution as being the "correct specification", but we note here that other distributions are possible (_e.g._, probit).
+
+Assuming that we have correctly specified the outcome distribution as binomial, we can fit a gen-
+eralized linear model using a binomial distribution and an identity link without needing to adjust
+the standard error estimates used to calculate confidence limits.
+
+In some cases, we may wish to use alternative models. The OLS model and the GLM with a Gaussian distribution are equivalent. Both of these models, plus the GLM using a Poisson distribution, require use of a "robust" sandwich estimator to estimate an unbiased standard error for the risk difference. This sandwich estimator accounts for misspecification of the probability distribution, _i.e._, the fact that we are fitting models that assume Gaussian or Poisson distributions to an outcome that follows a binomial distribution. (See Section \ref{sec-rr-sandwich} for further explication in the context of the risk ratio).
+
+## Calculate a risk difference by fitting a generalized linear model, specifying an identity link and binomial probability distribution
+
+Here, we provide code to estimate a risk difference using a **GLM with an identity link and a binomial probability distribution**. Given that in our example the outcome death is a binary variable and has a binomial distribution, the model is correctly specified; hence, no correction is needed for the standard error:
+
+```{r rd-direct-glm-lin-bin}
+glm_lin_bin_fit <- glm(death ~ weakheart,
+                       data = nhefs,
+                       family = binomial(link = "identity"))
+
+# extract the coefficient for weakheart
+glm_lin_bin_rd <- unname(coef(glm_lin_bin_fit)[2])
+
+# note we use the standard variance-covariance matrix extractor
+# no need for sandwich estimator under the correct probability distribution
+glm_lin_bin_se <- sqrt(diag(vcov(glm_lin_bin_fit))[2])
+glm_lin_bin_se <- unname(glm_lin_bin_se)
+
+c(RD = glm_lin_bin_rd,
+  SE = glm_lin_bin_se,
+  `95% CL, Lower` = glm_lin_bin_rd - qnorm(0.975) * glm_lin_bin_se,
+  `95% CL, Upper` = glm_lin_bin_rd + qnorm(0.975) * glm_lin_bin_se)
+```
+
+
+## Calculate a risk difference by fitting a linear model using ordinary least squares estimation
+Here, we provide code to estimate a risk difference using **OLS**. Because this model is incorrectly specified (assumes a Gaussian distribution when we are working with a binomially distributed outcome), we must estimate "robust" standard errors:
 
 ```{r rd-direct-lm}
 lm_fit <- lm(death ~ weakheart, data = nhefs)
-tidy(lm_fit, conf.int = TRUE)
+
+# extract the coefficient for weakheart
+lm_fit_rd <- unname(coef(lm_fit)[2])
+
+# extract the variance for the weakheart coeffient and
+# take the square root to get the standard error
+lm_fit_robse <- sqrt(diag(vcovHC(lm_fit, type = "HC0"))[2])
+lm_fit_robse <- unname(lm_fit_robse)
+
+c(RD = lm_fit_rd,
+  RobustSE = lm_fit_robse,
+  `95% CL, Lower` = lm_fit_rd - qnorm(0.975) * lm_fit_robse,
+  `95% CL, Upper` = lm_fit_rd + qnorm(0.975) * lm_fit_robse)
 ```
 
-Generalized linear model fit using the method of maximum likelihood:
+## Calculate a risk difference by fitting a generalized linear model, specifying an identity link and a Gaussian probability distribution
+Here, we provide code to estimate a risk difference using a **GLM with an identity link and a Gaussian probability distribution**. Because this model is incorrectly specified (assumes a Gaussian distribution when we are working with a binomially distributed outcome), we must estimate "robust" standard errors:
 
-```{r rd-direct-glm}
-glm_fit <- glm(death ~ weakheart,
-               data = nhefs,
-               family = gaussian(link = "identity"))
-tidy(glm_fit, conf.int = TRUE)
+```{r rd-direct-glm-lin-gaussian}
+glm_lin_gauss_fit <- glm(death ~ weakheart,
+                     data = nhefs,
+                     family = gaussian(link = "identity"))
+
+glm_lin_gauss_rd <- unname(coef(glm_lin_gauss_fit)[2])
+glm_lin_gauss_robse <- sqrt(diag(vcovHC(glm_lin_gauss_fit, type = "HC0"))[2])
+glm_lin_gauss_robse <- unname(glm_lin_gauss_robse)
+
+c(RD = glm_lin_gauss_rd,
+  RobustSE = glm_lin_gauss_robse,
+  `95% CL, Lower` = glm_lin_gauss_rd - qnorm(0.975) * glm_lin_gauss_robse,
+  `95% CL, Upper` = glm_lin_gauss_rd + qnorm(0.975) * glm_lin_gauss_robse)
+```
+
+## Calculate a risk difference by fitting a generalized linear model, specifying an identity link and a Poisson probability distribution
+Here, we provide code to estimate a risk difference using a **GLM with an identity link and a Poisson probability distribution**. Because this model is incorrectly specified (assumes a Poisson distribution when we are working with a binomially distributed outcome), we must estimate "robust" standard errors:
+
+```{r rd-direct-glm-lin-pois}
+glm_lin_pois_fit <- glm(death ~ weakheart,
+                        data = nhefs,
+                        family = poisson(link = "identity"))
+
+glm_lin_pois_rd <- unname(coef(glm_lin_pois_fit)[2])
+glm_lin_pois_robse <- sqrt(diag(vcovHC(glm_lin_pois_fit, type = "HC0"))[2])
+glm_lin_pois_robse <- unname(glm_lin_pois_robse)
+
+c(RD = glm_lin_pois_rd,
+  RobustSE = glm_lin_pois_robse,
+  `95% CL, Lower` = glm_lin_pois_rd - qnorm(0.975) * glm_lin_pois_robse,
+  `95% CL, Upper` = glm_lin_pois_rd + qnorm(0.975) * glm_lin_pois_robse)
 ```
 
 
 # Direct estimation of a risk ratio using a log-binomial regression model
 
-## Step 1. Fit a log-binomial regression for the relationship between heart medication and mortality
+## Fit a log-binomial regression for the relationship between heart medication and mortality
 
-We can fit a log-binomial regression model in R by using the `glm()` function from the `stats` package by specifying a binomial error distribution and a (natural) log link, which is passed to the `family` argument of `glm()` as shown below. We extract $\beta_1$ and use `tidy()` from the `broom` package to exponentiate the coefficient, yielding a risk ratio, and include the 95% confidence interval in our model output.
+We can fit a log-binomial regression model in R by using the `glm()` function from the `stats` package by specifying a binomial distribution and a (natural) log link, which is passed to the `family` argument of `glm()` as shown below. We extract $\beta_1$ and use `tidy()` from the `broom` package to exponentiate the coefficient, yielding a risk ratio, and include the 95% confidence interval in our model output.
 
 ```{r rr-direct-logbin}
 lbin_fit <- glm(death ~ weakheart,
@@ -291,7 +363,8 @@ lbin_fit <- glm(death ~ weakheart,
 tidy(lbin_fit, exponentiate = TRUE, conf.int = TRUE)
 ```
 
-We could also use the `logbin` package, which implements several subroutines that may avoid commonly encountered convergence issues with the log-binomial model
+We could also use the `logbin` package, which implements several subroutines that may avoid commonly encountered convergence issues with the log-binomial model:
+
 
 ```{r rr-direct-logbin-pkg, warning = FALSE}
 logbin_fit <- logbin(death ~ weakheart,
@@ -303,9 +376,9 @@ summary(logbin_fit)
 
 # Direct estimation of a risk ratio using a modified Poisson model
 
-## Step 1. Fit a Poisson regression for the relationship between heart medication and mortality
+## Fit a Poisson regression for the relationship between heart medication and mortality
 
-We can fit a log-binomial regression model in R by using the `glm()` function from the `stats` package by specifying a Poisson error distribution and a (natural) log link, which is passed to the `family` argument of `glm()` as shown below. We extract $\beta_1$ and use `tidy()` from the `broom` package to expontentiate the coefficient, yielding a risk ratio, and include the 95% confidence interval in our model output.
+We can fit a Poisson regression model in R by using the `glm()` function from the `stats` package by specifying a Poisson distribution and a (natural) log link, which is passed to the `family` argument of `glm()` as shown below. We extract $\beta_1$ and use `tidy()` from the `broom` package to expontentiate the coefficient, yielding a risk ratio, and include the 95% confidence interval in our model output.
 
 ```{r direct-poisson}
 poisson_fit <- glm(death ~ weakheart,
@@ -315,9 +388,9 @@ poisson_fit <- glm(death ~ weakheart,
 tidy(poisson_fit, exponentiate = TRUE, conf.int = TRUE)
 ```
 
-## Step 2. Calculate "robust" standard errors using the sandwich estimator
+## Calculate "robust" standard errors using the sandwich estimator {#sec-rr-sandwich}
 
-Because we are using Poisson regression to model a binary outcome, and because binary outcomes follow a *binomial* error distribution, the Poisson model is misspecified in the sense that it will not produce valid standard errors for coefficient estimates. The sandwich estimator "corrects" these standard errors to account for the misspecification.
+Because we are using Poisson regression to model a binary outcome, and because binary outcomes do not follow a Poisson distribution, the Poisson model is misspecified in the sense that it will not produce valid standard errors for coefficient estimates. The sandwich estimator "corrects" these standard errors to account for the misspecification.
 
 We begin by estimating the covariance matrix using the `vcov()` function from the `sandwich` package.
 
@@ -348,12 +421,12 @@ model_output <- cbind(
 )
 
 # Coerce model_output into a data frame
-# Return second row to focus on the weekheart variable
+# Return second row to focus on the weakheart variable
 model_output <- as.data.frame(model_output)
 knitr::kable(model_output[2, ], digits = 4)
 ```
 
-## Step 3. Estimate 95% confidence limits for the risk ratio via non-parametric bootstrapping.
+## Estimate 95% confidence limits for the risk ratio via non-parametric bootstrapping.
 
 ```{r rr-pois-bootstrap, fig.asp = 0.5}
 # First, write a function that
@@ -393,11 +466,9 @@ print(bci)
 
 # Indirect estimation of a risk ratio from a logistic regression model
 
-## Implementing the procedure yourself in R
+We can fit a logistic regression model in R by using the `glm()` function from the `stats` package by specifying a binomial distribution, as shown below. The `binomial()` function uses a logit link by default. 
 
-We can fit a logistic regression model in R by using the `glm()` function from the `stats` package by specifying a binomial error distribution, as shown below. The `binomial()` function uses a logit link by default. 
-
-### Step 1. Fit a logistic regression for the relationship between heart medication and mortality
+## Fit a logistic regression for the relationship between heart medication and mortality
 
 ```{r indirect-logit-fit}
 fit1 <- glm(death ~ weakheart,
@@ -405,7 +476,7 @@ fit1 <- glm(death ~ weakheart,
             family = binomial())
 ```
 
-### Step 2. Predict the expected probability of death for each weakheart group.
+## Predict the expected probability of death for each weakheart group.
 
 Calculate the risk ratio's numerator as $Pr(death = 1 | weakheart = 1)$:
 
@@ -456,7 +527,7 @@ data.frame(Measure = names(sumlogit_ests),
   kableExtra::kable_styling(latex_options = "HOLD_position")
 ```
 
-### Step 3. Estimate 95% confidence limits for the risk ratio via non-parametric boostrapping.
+## Estimate 95% confidence limits for the risk ratio via non-parametric boostrapping.
 
 The basic aim of bootstrapping is to approximate the hypothetical sampling distribution upon which frequentist statistics are based [@Efron1994-introduction]. The general procedure involves the following steps:
 
@@ -477,7 +548,7 @@ We could write a program to carry out the procedure above, but thankfully, the `
 The following subsections describe how to get 95% confidence intervals for our indirect estimates of the risk ratio and risk difference using non-parametric bootstrapping.
 
 
-##### 3a. Write a function to evaluate repeatedly (*i.e.*, within each boostrap replicate).
+## Write a function to evaluate repeatedly (*i.e.*, within each bootstrap replicate).
 
 We begin by writing a function called `estimate_risk_measures()` that:
 
@@ -519,7 +590,7 @@ estimate_risk_measures <- function(dat, indices) {
 In order to play nicely with the `boot` package, our function must take two arguments: the first argument must take our base dataset as its input, while the second must take a vector of numeric indices indicating the sampled observations within a given bootstrap replicate. Note that the `boot()` function will conduct the resampling procedure itself, without our having to do it manually.
 
 
-##### 3b. Run analysis within each bootstrap replicate.
+## Run analysis within each bootstrap replicate.
 
 Here we put it all together and run `estimate_risk_measures()` within each of the 1,999 bootstrap replicates we direct the `boot()` function to generate for us. Note, too, that we ask `boot::boot()` to split the process up into multiple "jobs" and run these jobs in parallel vis the `ncpus` argument. (You will typically want to set `ncpus` to one or two fewer than the total number of cores available on a personal machine, so as not to exhaust your computer's resources.)
 
@@ -557,7 +628,7 @@ plot(indirect_boot, index = 1)
 plot(indirect_boot, index = 2)
 ```
 
-##### 3c. Calculate bootstrapped 95% confidence intervals
+## Calculate bootstrapped 95% confidence intervals
 
 In the code below, we ask `boot()` for both the standard percentile and bias-corrected and adjusted (BCa) confidence intervals via the `type` argument. These methods have strengths and drawbacks that depend on the statistic of interest [@Chernick2009-revisiting], though BCa intervals may be preferable for general purpose estimation of common point estimates in epidemiology [@Carpenter2000-bootstrap].
 
@@ -613,12 +684,14 @@ c(log(rr_lrr$RR) - 1.96 * rr_lrr$delta.var,
   log(rr_lrr$RR) + 1.96 * rr_lrr$delta.var) |> exp()
 ```
 
-## References
+# References
 
 ::: {#refs}
 :::
 
-## Session Information
+\newpage
+
+# Session Information
 
 ```{r}
 sessioninfo::session_info()
